@@ -100,14 +100,22 @@ class TimeCampAPI:
             "can_view_rates": "0",
             "add_to_all_projects": "0",
             "send_email": "0",
-            "email[]": str(email)
+            "email": [str(email)]
         }
+        # logger.debug(f"Adding user {email} to group {group_id}")
+        # logger.debug(f"Request URL: {self.base_url}/group/{group_id}/user")
+        # logger.debug(f"Request data: {data}")
+        
         response = requests.post(
             f"{self.base_url}/group/{group_id}/user",
             headers=self.headers,
             params=self.params,
             json=data
         )
+        
+        # logger.debug(f"Response status: {response.status_code}")
+        # logger.debug(f"Response content: {response.text}")
+        
         response.raise_for_status()
         return response.json()
 

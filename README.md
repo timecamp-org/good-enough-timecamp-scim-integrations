@@ -15,6 +15,19 @@ pip3 install -r requirements.txt
 cp .env.sample .env
 ```
 
+## System Architecture
+
+```mermaid
+graph TD
+    BH[1: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
+    BH -->|saves| JSON[users.json]
+    TC[2: TimeCamp Synchronizer] -->|uses| JSON
+    TC -->|use| TAPI[TimeCamp API]
+    
+    style BH fill:#f9f,stroke:#333
+    style TC fill:#9f9,stroke:#333
+```
+
 ## Testing
 
 Always test the integration first using these steps:
@@ -50,18 +63,6 @@ python timecamp_sync.py --dry-run
 ```bash
 python timecamp_sync.py
 ```
-
-## Logging
-
-All operations are logged to both:
-- Console (stdout) for immediate feedback
-- `logs/sync.log` file for historical reference
-
-The log file:
-- Uses rotation (10 MB per file)
-- Keeps last 5 files (sync.log.1, sync.log.2, etc.)
-- Includes timestamps and log levels
-- Is git-ignored
 
 ## Crontab Setup
 

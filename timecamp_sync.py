@@ -190,7 +190,7 @@ class TimeCampAPI:
         json_data = demjson3.encode(data)  # This ensures proper JSON formatting
         logger.debug(f"Adding group with data: {json_data}")
         logger.debug(f"Request URL: {self.base_url}/group")
-        logger.debug(f"Request headers: {self.headers}")
+        # logger.debug(f"Request headers: {self.headers}")
         logger.debug(f"Request params: {self.params}")
         
         max_retries = 5
@@ -206,7 +206,7 @@ class TimeCampAPI:
                 )
                 
                 logger.debug(f"Response status: {response.status_code}")
-                logger.debug(f"Response headers: {dict(response.headers)}")
+                # logger.debug(f"Response headers: {dict(response.headers)}")
                 logger.debug(f"Response content: {response.text}")
                 
                 response.raise_for_status()
@@ -346,6 +346,17 @@ def sync_users(dry_run=False):
                         updates['fullName'] = source_user['name']
                         changes.append(f"name from '{tc_user['display_name']}' to '{source_user['name']}'")
                     
+                    # Check if user should be activated
+                    if source_user.get('status', '').lower() == 'active' and not tc_user.get('is_enabled', True):
+                        if not dry_run:
+                            logger.info(f"Activating user: {email} ({tc_user.get('display_name', 'unknown name')})")
+                            try:
+                                timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
+                            except requests.exceptions.RequestException as e:
+                                logger.error(f"Error activating user {email}: {str(e)}")
+                        else:
+                            logger.info(f"[DRY RUN] Would activate user: {email} ({tc_user.get('display_name', 'unknown name')})")
+                    
                     # Check if group needs updating
                     if group_id:
                         current_group_name = next((g['name'] for g in timecamp_groups if str(g['group_id']) == str(tc_user['group_id'])), 'unknown')
@@ -364,12 +375,15 @@ def sync_users(dry_run=False):
                         else:
                             logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
                 else:
-                    # Create new user
-                    if not dry_run:
-                        logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{source_user['department'] or 'root'}'")
-                        timecamp.add_user(email, source_user['name'], group_id or root_group_id)
+                    # Create new user only if status is active
+                    if source_user.get('status', '').lower() == 'active':
+                        if not dry_run:
+                            logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{source_user['department'] or 'root'}'")
+                            timecamp.add_user(email, source_user['name'], group_id or root_group_id)
+                        else:
+                            logger.info(f"[DRY RUN] Would create user: {email} ({source_user['name']}) in group '{source_user['department'] or 'root'}'")
                     else:
-                        logger.info(f"[DRY RUN] Would create user: {email} ({source_user['name']}) in group '{source_user['department'] or 'root'}'")
+                        logger.debug(f"Skipping creation of inactive user: {email} (status: {source_user.get('status', 'unknown')})")
 
             except requests.exceptions.RequestException as e:
                 logger.error(f"Error processing user {email}: {str(e)}")
@@ -381,15 +395,26 @@ def sync_users(dry_run=False):
                 logger.debug(f"Skipping ignored user for deactivation: {email} (ID: {tc_user['user_id']})")
                 continue
                 
-            if email not in source_users and tc_user.get('is_enabled', True):
+            should_deactivate = False
+            deactivation_reason = None
+            
+            # Check if user exists in source and is active
+            if email not in source_users:
+                should_deactivate = True
+                deactivation_reason = "not present in users.json"
+            elif source_users[email].get('status', '').lower() != 'active':
+                should_deactivate = True
+                deactivation_reason = f"status is {source_users[email].get('status', 'unknown')}"
+            
+            if should_deactivate and tc_user.get('is_enabled', True):
                 if not dry_run:
-                    logger.info(f"Deactivating user: {email} ({tc_user.get('display_name', 'unknown name')})")
+                    logger.info(f"Deactivating user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
                     try:
                         timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
                     except requests.exceptions.RequestException as e:
                         logger.error(f"Error deactivating user {email}: {str(e)}")
                 else:
-                    logger.info(f"[DRY RUN] Would deactivate user: {email} ({tc_user.get('display_name', 'unknown name')})")
+                    logger.info(f"[DRY RUN] Would deactivate user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
         
         logger.info("Synchronization completed successfully")
         

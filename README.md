@@ -96,9 +96,22 @@ Notes:
 
 ## Not Yet Implemented
 
-- Synchronise user roles
+- User roles
 - Performance
 - Don't use demjson3 (json doublequote is not an issue in the end)
+- Change of email (use external_id to identify)
+- Remove empty groups
+- Setting to sync only selected things (no groups)
+- User without a group
+
+## Test Cases
+
+- User changed name ✅
+- User changed group ✅
+- User added ✅
+- User disabled ✅
+- User removed ✅
+- User added as inactive ✅
 
 ## License
 

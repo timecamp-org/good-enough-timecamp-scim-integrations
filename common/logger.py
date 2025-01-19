@@ -5,7 +5,7 @@ from logging.handlers import RotatingFileHandler
 def setup_logger():
     """Configure and return the application logger."""
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     
     # Create logs directory if it doesn't exist
     os.makedirs('logs', exist_ok=True)
@@ -20,10 +20,12 @@ def setup_logger():
         backupCount=5
     )
     file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.INFO)
     
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.DEBUG)
     
     # Add handlers to logger
     logger.addHandler(file_handler)

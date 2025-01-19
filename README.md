@@ -97,7 +97,8 @@ Notes:
 ## Not Yet Implemented
 
 - Synchronise user roles
-- Synchronise tree structure for departments
+- Performance
+- Don't use demjson3 (json doublequote is not an issue in the end)
 
 ## License
 

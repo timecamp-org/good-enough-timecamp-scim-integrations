@@ -3,7 +3,6 @@ import json
 import time
 import argparse
 import requests
-import demjson3
 from dotenv import load_dotenv
 from common.logger import setup_logger
 from typing import Optional, Dict, List, Any
@@ -125,6 +124,7 @@ class TimeCampAPI:
             "group_id": str(group_id),
             "parent_id": str(parent_id)
         }
+        json_data = json.dumps(data)  # Convert to JSON string
         response = requests.post(
             f"{self.base_url}/group",
             headers=self.headers,
@@ -154,6 +154,7 @@ class TimeCampAPI:
                 "display_name": str(fields['fullName']),
                 "user_id": str(user_id)
             }
+            logger.debug(f"Updating user {user_id} with data: {data}")
             response = requests.post(
                 f"{self.base_url}/user",
                 headers=self.headers,
@@ -195,7 +196,7 @@ class TimeCampAPI:
             "name": str(name),
             "parent_id": str(parent_id)
         }
-        json_data = demjson3.encode(data)  # This ensures proper JSON formatting
+        json_data = json.dumps(data)  # Convert to JSON string
         logger.debug(f"Adding group with data: {json_data}")
         logger.debug(f"Request URL: {self.base_url}/group")
         # logger.debug(f"Request headers: {self.headers}")
@@ -244,6 +245,7 @@ def sync_users(dry_run=False):
         domain = os.getenv('TIMECAMP_DOMAIN', 'app.timecamp.com')
         ignored_user_ids_str = os.getenv('TIMECAMP_IGNORED_USER_IDS', '')
         root_group_id = int(os.getenv('TIMECAMP_ROOT_GROUP_ID'))
+        show_external_id = os.getenv('TIMECAMP_SHOW_EXTERNAL_ID', 'true').lower() == 'true'
         
         if not api_key:
             raise ValueError("Missing TIMECAMP_API_KEY environment variable")
@@ -272,6 +274,14 @@ def sync_users(dry_run=False):
         with open(users_file, 'r') as f:
             source_data = json.load(f)
         
+        # Clean up department names
+        for user in source_data['users']:
+            if user.get('department'):
+                user['department'] = '/'.join(part.strip() for part in user['department'].split('/') if part.strip())
+            # Format user name with external_id if enabled
+            if show_external_id and user.get('external_id'):
+                user['name'] = f"{user['name']} [{user['external_id']}]"
+        
         source_users = {user['email']: user for user in source_data['users']}
         
         # Get current TimeCamp users and groups
@@ -295,11 +305,13 @@ def sync_users(dry_run=False):
         for email, source_user in source_users.items():
             if source_user['department']:
                 logger.debug(f"Processing department: {source_user['department']} for user {email}")
-                parts = source_user['department'].split('/')
+                parts = [part.strip() for part in source_user['department'].split('/')]
                 current_path = ''
                 parent_id = None
                 
                 for part in parts:
+                    if not part:  # Skip empty parts after trimming
+                        continue
                     if current_path:
                         current_path += '/'
                     current_path += part

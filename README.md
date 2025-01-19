@@ -99,11 +99,10 @@ Notes:
 
 - User roles
 - Performance
-- Don't use demjson3 (json doublequote is not an issue in the end)
 - Change of email (use external_id to identify)
 - Remove empty groups
 - Setting to sync only selected things (no groups)
-- User without a group
+- Setting to move disabled users to specific group_id
 
 ## Test Cases
 
@@ -113,6 +112,9 @@ Notes:
 - User disabled ✅
 - User removed ✅
 - User added as inactive ✅
+- User added with empty department ✅
+- Group name with whitespaces near / ✅
+- Setting enabled to add external_id to user name
 
 ## License
 

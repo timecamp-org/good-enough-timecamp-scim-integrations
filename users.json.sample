@@ -1,0 +1,25 @@
+{
+  "users": [
+    {
+      "external_id": "123",
+      "name": "John Doe",
+      "email": "john.doe@example.com",
+      "department": "Engineering",
+      "status": "active"
+    },
+    {
+      "external_id": "124",
+      "name": "Jane Smith",
+      "email": "jane.smith@example.com",
+      "department": "Engineering/Frontend",
+      "status": "active"
+    },
+    {
+      "external_id": "125",
+      "name": "Bob Wilson",
+      "email": "bob.wilson@example.com",
+      "department": "Sales/EMEA",
+      "status": "active"
+    }
+  ]
+} 

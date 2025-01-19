@@ -1,8 +1,9 @@
 import os
 import json
+import base64
+import requests
 from datetime import datetime
 from dotenv import load_dotenv
-from pyBambooHR import PyBambooHR
 from common.logger import setup_logger
 
 logger = setup_logger()
@@ -19,13 +20,23 @@ def fetch_bamboo_users():
         if not all([subdomain, api_key]):
             raise ValueError("Missing required environment variables")
         
-        # Initialize BambooHR client
-        bamboo = PyBambooHR(subdomain=subdomain, api_key=api_key)
+        # Setup authentication and headers
+        auth_string = base64.b64encode(f"{api_key}:x".encode()).decode()
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Basic {auth_string}'
+        }
+        
+        # BambooHR API endpoint for directory
+        url = f'https://api.bamboohr.com/api/gateway.php/{subdomain}/v1/employees/directory'
         
         logger.info("Fetching employees from BambooHR...")
         
         # Get all employees
-        employees = bamboo.get_employees()
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        employees = response.json().get('employees', [])
         
         # Filter active employees and transform to our schema
         users = []
@@ -49,8 +60,11 @@ def fetch_bamboo_users():
         
         logger.info(f"Successfully saved {len(users)} users to users.json")
         
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching BambooHR users: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error processing BambooHR users: {str(e)}")
         raise
 
 if __name__ == "__main__":

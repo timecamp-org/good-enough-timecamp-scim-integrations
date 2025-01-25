@@ -5,230 +5,11 @@ import argparse
 import requests
 from dotenv import load_dotenv
 from common.logger import setup_logger
+from common.utils import TimeCampConfig, clean_name, get_users_file, clean_department_path
 from typing import Optional, Dict, List, Any, Set, Tuple
+from common.api import TimeCampAPI
 
-logger = setup_logger()
-
-class TimeCampAPI:
-    def __init__(self, api_key: str, domain: str = "app.timecamp.com"):
-        self.api_key = api_key
-        self.base_url = f"https://{domain}/third_party/api"
-        self.headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        self.params = {}
-
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """Make an API request with universal error handling."""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        
-        # Merge default params with custom params if provided
-        if 'params' in kwargs:
-            params = {**self.params, **kwargs.pop('params')}
-        else:
-            params = self.params
-            
-        max_retries = 5
-        retry_delay = 5  # seconds
-        
-        for attempt in range(max_retries):
-            try:
-                response = requests.request(
-                    method,
-                    url,
-                    headers=self.headers,
-                    params=params,
-                    **kwargs
-                )
-                logger.debug(f"API {method} {url}")
-                # logger.debug(f"Request params: {params}")
-                # logger.debug(f"Request data: {kwargs.get('data', kwargs.get('json', {}))}")
-                # logger.debug(f"Response status: {response.status_code}")
-                # logger.debug(f"Response content: {response.text}")
-                
-                if response.status_code == 429:  # Rate limit exceeded
-                    if attempt < max_retries - 1:
-                        wait_time = retry_delay * (attempt + 1)  # Exponential backoff
-                        logger.warning(f"Rate limit exceeded. Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
-                        time.sleep(wait_time)
-                        continue
-                
-                response.raise_for_status()
-                return response
-                
-            except requests.exceptions.RequestException as e:
-                if getattr(e.response, 'status_code', None) == 429 and attempt < max_retries - 1:
-                    wait_time = retry_delay * (attempt + 1)  # Exponential backoff
-                    logger.warning(f"Rate limit exceeded. Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
-                    time.sleep(wait_time)
-                    continue
-                    
-                logger.error(f"API Error: {method} {url}")
-                logger.error(f"Status code: {getattr(e.response, 'status_code', 'N/A')}")
-                logger.error(f"Response content: {getattr(e.response, 'text', str(e))}")
-                raise
-        
-        # If we get here, we've exhausted all retries
-        raise requests.exceptions.RequestException(f"Failed after {max_retries} retries due to rate limiting")
-
-    def get_group_users(self, group_id: int) -> List[Dict[str, Any]]:
-        """Get users in a specific group."""
-        response = self._make_request('GET', f"group/{group_id}/user")
-        return response.json()
-
-    def _batch_user_ids(self, user_ids: List[int], batch_size: int = 50) -> List[List[int]]:
-        """Split user IDs into batches."""
-        return [user_ids[i:i + batch_size] for i in range(0, len(user_ids), batch_size)]
-
-    def is_user_enabled(self, user_id: int) -> bool:
-        """Check if a user is enabled (single user version)."""
-        return self.are_users_enabled([user_id])[user_id]
-
-    def are_users_enabled(self, user_ids: List[int]) -> Dict[int, bool]:
-        """Check if multiple users are enabled in bulk.
-        
-        Args:
-            user_ids: List of user IDs to check
-            
-        Returns:
-            Dictionary mapping user IDs to their enabled status
-        """
-        result = {}
-        batches = self._batch_user_ids(user_ids)
-        
-        for batch in batches:
-            params = {
-                **self.params,
-                "name[]": "disabled_user"
-            }
-            batch_ids = ",".join(str(uid) for uid in batch)
-            response = self._make_request('GET', f"user/{batch_ids}/setting", params=params)
-            settings = response.json()
-            
-            # Process the batch response
-            for user_id in batch:
-                user_settings = [
-                    s for s in settings 
-                    if int(s['userId']) == user_id 
-                    and str(s['name']) == "disabled_user"
-                ]
-                # User is enabled if there's no disabled_user setting or if it's not set to "1"
-                result[user_id] = not (user_settings and str(user_settings[0]['value']) == "1")
-        
-        return result
-
-    def get_users(self) -> List[Dict[str, Any]]:
-        """Get all users with their group information."""
-        logger.debug(f"Fetching users from {self.base_url}/users")
-        response = self._make_request('GET', "users")
-        entries = response.json()
-
-        # Get group information for each user
-        groups = {}
-        for entry in entries:
-            groups[entry['group_id']] = {}
-
-        for group_id in groups:
-            group_users = self.get_group_users(group_id)
-            for group_user in group_users:
-                groups[group_id][group_user['user_id']] = group_user
-
-        # Enrich user data with group information and check enabled status in bulk
-        user_ids = [int(entry['user_id']) for entry in entries]
-        enabled_statuses = self.are_users_enabled(user_ids)
-
-        for entry in entries:
-            group_id = entry['group_id']
-            user_id = int(entry['user_id'])
-            
-            if group_id in groups and str(user_id) in groups[group_id]:
-                group_info = groups[group_id][str(user_id)]
-                role = group_info['role_id']
-                entry['is_manager'] = role in [1, 2]
-                entry['is_enabled'] = enabled_statuses[user_id]
-
-        return entries
-
-    def get_groups(self) -> List[Dict[str, Any]]:
-        """Get all groups."""
-        response = self._make_request('GET', "group")
-        return response.json()
-
-    def add_user(self, email: str, name: str, group_id: int) -> Dict[str, Any]:
-        """Add a new user to TimeCamp."""
-        data = {
-            "tt_global_admin": "0",
-            "tt_can_create_level_1_tasks": "0",
-            "can_view_rates": "0",
-            "add_to_all_projects": "0",
-            "send_email": "0",
-            "email": [str(email)]
-        }
-        response = self._make_request('POST', f"group/{group_id}/user", json=data)
-        return response.json()
-
-    def update_group_parent(self, group_id: int, parent_id: int) -> None:
-        """Update a group's parent."""
-        data = {
-            "group_id": str(group_id),
-            "parent_id": str(parent_id)
-        }
-        self._make_request('POST', "group", json=data)
-
-    def update_user_setting(self, user_id: int, name: str, value: str) -> None:
-        """Update a user setting."""
-        data = {
-            "name": str(name),
-            "value": str(value)
-        }
-        self._make_request('PUT', f"user/{user_id}/setting", json=data)
-
-    def update_user(self, user_id: int, fields: Dict[str, Any], current_group_id: Optional[int] = None) -> None:
-        """Update user information."""
-        if 'fullName' in fields:
-            data = {
-                "display_name": str(fields['fullName']),
-                "user_id": str(user_id)
-            }
-            self._make_request('POST', "user", json=data)
-
-        if 'isManager' in fields and current_group_id:
-            role_id = "2" if fields['isManager'] else "3"  # 2 for manager, 3 for user
-            data = {
-                "role_id": role_id,
-                "user_id": str(user_id)
-            }
-            self._make_request('PUT', f"group/{current_group_id}/user", json=data)
-
-        if 'groupId' in fields and current_group_id:
-            data = {
-                "group_id": str(fields['groupId']),
-                "user_id": str(user_id)
-            }
-            self._make_request('PUT', f"group/{current_group_id}/user", json=data)
-
-    def add_group(self, name: str, parent_id: int) -> str:
-        """Add a new group."""
-        data = {
-            "name": str(name),
-            "parent_id": str(parent_id)
-        }
-        max_retries = 5
-        retry_delay = 15  # seconds
-        
-        for attempt in range(max_retries):
-            try:
-                response = self._make_request('PUT', "group", data=json.dumps(data))
-                response_data = response.json()
-                return str(response_data.get("group_id"))
-            except requests.exceptions.HTTPError:
-                if attempt < max_retries - 1:
-                    logger.debug(f"Attempt {attempt + 1} failed, retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                else:
-                    raise
+logger = setup_logger('timecamp_sync')
 
 class GroupSynchronizer:
     def __init__(self, api: TimeCampAPI, root_group_id: int):
@@ -236,377 +17,207 @@ class GroupSynchronizer:
         self.root_group_id = root_group_id
 
     def _build_group_paths(self, groups: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-        """Build a map of full group paths and their details.
-        
-        Returns:
-            Dictionary mapping full paths to group details including:
-            - group_id: TimeCamp group ID
-            - name: Group name (last part of path)
-            - parent_path: Full path of parent group
-            - parent_id: TimeCamp parent group ID
-        """
-        # First, create a map of group IDs to their details
         groups_by_id = {str(g['group_id']): {**g, 'name': g['name'].strip()} for g in groups}
         path_map = {}
         
         for group in groups:
-            # Build full path by traversing up the parent chain
             path_parts = []
             current = group
             while current:
                 path_parts.insert(0, current['name'].strip())
-                parent_id = current.get('parent_id')
-                current = groups_by_id.get(str(parent_id))
+                current = groups_by_id.get(str(current.get('parent_id')))
             
-            full_path = '/'.join(path_parts)
-            parent_path = '/'.join(path_parts[:-1]) if len(path_parts) > 1 else None
-            
-            path_map[full_path] = {
+            path_map['/'.join(path_parts)] = {
                 'group_id': group['group_id'],
                 'name': group['name'].strip(),
-                'parent_path': parent_path,
+                'parent_path': '/'.join(path_parts[:-1]) if len(path_parts) > 1 else None,
                 'parent_id': group.get('parent_id')
             }
-            
         return path_map
 
     def sync_structure(self, department_paths: Set[str], dry_run: bool = False) -> Dict[str, Dict[str, Any]]:
-        """Synchronize the entire group structure.
-        
-        Args:
-            department_paths: Set of all department paths needed
-            dry_run: Whether to actually make changes
-            
-        Returns:
-            Dictionary mapping department paths to their details
-        """
-        # Get current group structure
         current_groups = self.api.get_groups()
         current_paths = self._build_group_paths(current_groups)
+        groups_by_parent = {}
         
-        # Create a map of groups by their IDs for quick lookup
-        groups_by_id = {str(g['group_id']): g for g in current_groups}
-        
-        # Create a map of groups by their names for each parent_id
-        groups_by_parent: Dict[str, Dict[str, Dict[str, Any]]] = {}
         for group in current_groups:
             parent_id = str(group.get('parent_id', '0'))
             if parent_id not in groups_by_parent:
                 groups_by_parent[parent_id] = {}
             groups_by_parent[parent_id][group['name'].strip()] = group
-        
-        # Sort paths to ensure parent groups are created first
-        sorted_paths = sorted(department_paths, key=lambda x: len(x.split('/')))
-        
-        for full_path in sorted_paths:
-            if not full_path:  # Skip empty paths
+
+        for full_path in sorted(department_paths, key=lambda x: len(x.split('/'))):
+            if not full_path or full_path in current_paths:
                 continue
-                
-            if full_path in current_paths:
-                logger.debug(f"Group already exists: {full_path}")
-                continue
-                
-            # Split path and get parent info
+
             parts = [p.strip() for p in full_path.split('/') if p.strip()]
-            
-            # Create each part of the path if it doesn't exist
             current_path = ''
             parent_id = str(self.root_group_id)
-            
+
             for i, part in enumerate(parts):
-                if current_path:
-                    current_path += '/'
-                current_path += part
-                
-                # Check if group exists under current parent
+                current_path = f"{current_path}/{part}" if current_path else part
                 existing_group = groups_by_parent.get(parent_id, {}).get(part)
-                
+
                 if existing_group:
-                    # Use existing group
                     group_id = existing_group['group_id']
                     current_paths[current_path] = {
-                        'group_id': group_id,
-                        'name': part,
+                        'group_id': group_id, 'name': part,
                         'parent_path': '/'.join(parts[:i]) if i > 0 else None,
                         'parent_id': parent_id
                     }
                     parent_id = str(group_id)
                 else:
-                    # Create new group
                     if not dry_run:
                         logger.info(f"Creating group: {part} in path {current_path}")
                         group_id = self.api.add_group(part, int(parent_id))
-                        
-                        # Add to our maps
                         group_info = {
-                            'group_id': group_id,
-                            'name': part,
+                            'group_id': group_id, 'name': part,
                             'parent_path': '/'.join(parts[:i]) if i > 0 else None,
                             'parent_id': parent_id
                         }
                         current_paths[current_path] = group_info
-                        
-                        if parent_id not in groups_by_parent:
-                            groups_by_parent[parent_id] = {}
-                        groups_by_parent[parent_id][part] = {
-                            'group_id': group_id,
-                            'name': part,
-                            'parent_id': parent_id
+                        groups_by_parent.setdefault(parent_id, {})[part] = {
+                            'group_id': group_id, 'name': part, 'parent_id': parent_id
                         }
-                        
                         parent_id = str(group_id)
                     else:
                         current_paths[current_path] = {
-                            'group_id': -1,
-                            'name': part,
+                            'group_id': -1, 'name': part,
                             'parent_path': '/'.join(parts[:i]) if i > 0 else None,
                             'parent_id': parent_id
                         }
                         parent_id = '-1'
-            
         return current_paths
 
 class UserSynchronizer:
-    def __init__(self, api: TimeCampAPI, root_group_id: int, ignored_user_ids: Set[int], show_external_id: bool = True):
+    def __init__(self, api: TimeCampAPI, config: TimeCampConfig):
         self.api = api
-        self.root_group_id = root_group_id
-        self.ignored_user_ids = ignored_user_ids
-        self.show_external_id = show_external_id
-        self.group_sync = GroupSynchronizer(api, root_group_id)
+        self.config = config
+        self.group_sync = GroupSynchronizer(api, config.root_group_id)
 
     def _get_source_users(self, users_file: str) -> Tuple[Dict[str, Dict[str, Any]], Set[str]]:
-        """Read and process source users from file."""
         with open(users_file, 'r') as f:
             source_data = json.load(f)
 
         department_paths = set()
         for user in source_data['users']:
             if user.get('department'):
-                user['department'] = '/'.join(part.strip() for part in user['department'].split('/') if part.strip())
+                user['department'] = clean_department_path(user['department'])
                 if user['department']:
                     department_paths.add(user['department'])
-            
-            if self.show_external_id and user.get('external_id'):
-                user['name'] = clean_name(f"{user['name']} - {user['external_id']}")
-            else:
-                user['name'] = clean_name(user['name'])
+            user['name'] = clean_name(f"{user['name']} - {user['external_id']}" if self.config.show_external_id and user.get('external_id') else user['name'])
 
         return {user['email']: user for user in source_data['users']}, department_paths
 
     def _process_existing_user(self, email: str, source_user: Dict[str, Any], tc_user: Dict[str, Any], 
                              group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
-        """Process updates for an existing user."""
-        if int(tc_user['user_id']) in self.ignored_user_ids:
+        if int(tc_user['user_id']) in self.config.ignored_user_ids:
             logger.debug(f"Skipping ignored user: {email} (ID: {tc_user['user_id']})")
             return
 
-        updates = {}
-        changes = []
-
-        # Check if name needs updating
+        updates, changes = {}, []
         if tc_user['display_name'] != source_user['name']:
             updates['fullName'] = source_user['name']
             changes.append(f"name from '{tc_user['display_name']}' to '{source_user['name']}'")
 
-        # Check if user should be activated
         if source_user.get('status', '').lower() == 'active' and not tc_user.get('is_enabled', True):
             if not dry_run:
                 logger.info(f"Activating user: {email} ({tc_user.get('display_name', 'unknown name')})")
                 self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
             else:
-                logger.info(f"[DRY RUN] Would activate user: {email} ({tc_user.get('display_name', 'unknown name')})")
+                logger.info(f"[DRY RUN] Would activate user: {email}")
 
-        # Check if group needs updating
-        if group_info:
-            current_group_path = tc_user.get('group_path')
-            if current_group_path != source_user['department']:
-                logger.debug(f"User {email} current group: {current_group_path}, target group: {source_user['department']}")
-                updates['groupId'] = group_info['group_id']
-                changes.append(f"group from '{current_group_path or 'unknown'}' to '{source_user['department']}'")
+        if group_info and tc_user.get('group_path') != source_user['department']:
+            updates['groupId'] = group_info['group_id']
+            changes.append(f"group from '{tc_user.get('group_path', 'unknown')}' to '{source_user['department']}'")
 
-        if updates:
-            if not dry_run:
-                logger.info(f"Updating user {email}: {', '.join(changes)}")
-                self.api.update_user(tc_user['user_id'], updates, tc_user['group_id'])
-            else:
-                logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
+        if updates and not dry_run:
+            logger.info(f"Updating user {email}: {', '.join(changes)}")
+            self.api.update_user(tc_user['user_id'], updates, tc_user['group_id'])
 
     def _process_new_user(self, email: str, source_user: Dict[str, Any], 
                          group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
-        """Process creation of a new user."""
         if source_user.get('status', '').lower() == 'active':
             if not dry_run:
                 logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{source_user.get('department', 'root')}'")
                 self.api.add_user(email, source_user['name'], 
-                                group_info['group_id'] if group_info else self.root_group_id)
+                                group_info['group_id'] if group_info else self.config.root_group_id)
             else:
-                logger.info(f"[DRY RUN] Would create user: {email} ({source_user['name']}) in group '{source_user.get('department', 'root')}'")
-        else:
-            logger.debug(f"Skipping creation of inactive user: {email} (status: {source_user.get('status', 'unknown')})")
+                logger.info(f"[DRY RUN] Would create user: {email}")
 
     def _process_deactivations(self, timecamp_users: Dict[str, Dict[str, Any]], 
                              source_users: Dict[str, Dict[str, Any]], dry_run: bool = False) -> None:
-        """Process user deactivations."""
         for email, tc_user in timecamp_users.items():
-            if int(tc_user['user_id']) in self.ignored_user_ids:
-                logger.debug(f"Skipping ignored user for deactivation: {email} (ID: {tc_user['user_id']})")
+            if int(tc_user['user_id']) in self.config.ignored_user_ids:
+                logger.debug(f"Skipping ignored user: {email}")
                 continue
 
+            # Check if user should be deactivated
             should_deactivate = False
-            deactivation_reason = None
-
             if email not in source_users:
                 should_deactivate = True
-                deactivation_reason = "not present in users.json"
+                reason = "not present in source"
             elif source_users[email].get('status', '').lower() != 'active':
                 should_deactivate = True
-                deactivation_reason = f"status is {source_users[email].get('status', 'unknown')}"
+                reason = f"status is {source_users[email].get('status', 'unknown')}"
 
-            if should_deactivate and tc_user.get('is_enabled', True):
-                if not dry_run:
-                    logger.info(f"Deactivating user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
-                    self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
+            # Get current status
+            is_currently_enabled = tc_user.get('is_enabled', True)
+            
+            if should_deactivate:
+                if is_currently_enabled:
+                    if not dry_run:
+                        logger.info(f"Deactivating user {email} ({reason})")
+                        self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
+                    else:
+                        logger.info(f"[DRY RUN] Would deactivate user {email} ({reason})")
                 else:
-                    logger.info(f"[DRY RUN] Would deactivate user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
+                    logger.debug(f"User {email} is already deactivated ({reason})")
 
     def _prepare_timecamp_users(self, timecamp_users: List[Dict[str, Any]], 
                               current_paths: Dict[str, Dict[str, Any]], root_group_name: Optional[str]) -> Dict[str, Dict[str, Any]]:
-        """Prepare TimeCamp users with group paths."""
         for user in timecamp_users:
             user['display_name'] = clean_name(user['display_name'])
-            group_id = user['group_id']
-            full_path = next(
-                (path for path, details in current_paths.items() 
-                 if str(details['group_id']) == str(group_id)),
-                None
-            )
-            if full_path and root_group_name and full_path.startswith(f"{root_group_name}/"):
-                user['group_path'] = full_path[len(root_group_name)+1:]
-            else:
-                user['group_path'] = full_path
-
+            full_path = next((path for path, details in current_paths.items() 
+                            if str(details['group_id']) == str(user['group_id'])), None)
+            user['group_path'] = full_path[len(root_group_name)+1:] if full_path and root_group_name and full_path.startswith(f"{root_group_name}/") else full_path
         return {user['email']: user for user in timecamp_users}
 
     def sync(self, users_file: str, dry_run: bool = False) -> None:
-        """Synchronize users with TimeCamp."""
         try:
-            # Get source users and department paths
             source_users, department_paths = self._get_source_users(users_file)
-
-            # Synchronize group structure
-            logger.info("Synchronizing group structure")
             group_structure = self.group_sync.sync_structure(department_paths, dry_run)
-
-            # Get and prepare current TimeCamp users
+            
             timecamp_users = self.api.get_users()
             current_groups = self.api.get_groups()
             current_paths = self.group_sync._build_group_paths(current_groups)
-
-            # Find root group name
-            root_group_name = next(
-                (group['name'] for group in current_groups 
-                 if str(group['group_id']) == str(self.root_group_id)),
-                None
-            )
-
-            # Prepare TimeCamp users with group paths
+            root_group_name = next((g['name'] for g in current_groups if str(g['group_id']) == str(self.config.root_group_id)), None)
+            
             timecamp_users_map = self._prepare_timecamp_users(timecamp_users, current_paths, root_group_name)
-
-            # Process users
+            
             for email, source_user in source_users.items():
                 try:
-                    department = source_user.get('department')
-                    group_info = group_structure.get(department) if department else None
-
+                    group_info = group_structure.get(source_user.get('department'))
                     if email in timecamp_users_map:
-                        self._process_existing_user(email, source_user, timecamp_users_map[email], 
-                                                 group_info, dry_run)
+                        self._process_existing_user(email, source_user, timecamp_users_map[email], group_info, dry_run)
                     else:
                         self._process_new_user(email, source_user, group_info, dry_run)
-
-                except requests.exceptions.RequestException as e:
+                except Exception as e:
                     logger.error(f"Error processing user {email}: {str(e)}")
-
-            # Handle deactivations
+            
             self._process_deactivations(timecamp_users_map, source_users, dry_run)
-
             logger.info("Synchronization completed successfully")
-
         except Exception as e:
             logger.error(f"Error during synchronization: {str(e)}")
             raise
 
-def get_users_file():
-    """Get the users JSON file path."""
-    if not os.path.exists("users.json"):
-        raise FileNotFoundError("users.json file not found. Please run the integration script first.")
-    return "users.json"
-
-def clean_name(name: Optional[str]) -> str:
-    """Clean special characters from name."""
-    if not name:
-        return ""
-        
-    # Replace or remove special characters
-    replacements = {
-        "'": "",
-        "(": "",
-        ")": "",
-        "[": "",
-        "]": "",
-        "{": "",
-        "}": "",
-        "`": "",
-        "´": "",
-        """: "",
-        """: "",
-        "'": "",
-        "'": "",
-    }
-    result = str(name)
-    for char, replacement in replacements.items():
-        result = result.replace(char, replacement)
-    return result.strip()
-
 def sync_users(dry_run=False):
-    """Synchronize users with TimeCamp."""
     try:
-        load_dotenv()
-        
-        # Get environment variables
-        api_key = os.getenv('TIMECAMP_API_KEY')
-        domain = os.getenv('TIMECAMP_DOMAIN', 'app.timecamp.com')
-        ignored_user_ids_str = os.getenv('TIMECAMP_IGNORED_USER_IDS', '')
-        root_group_id = int(os.getenv('TIMECAMP_ROOT_GROUP_ID'))
-        show_external_id = os.getenv('TIMECAMP_SHOW_EXTERNAL_ID', 'true').lower() == 'true'
-        
-        if not api_key:
-            raise ValueError("Missing TIMECAMP_API_KEY environment variable")
-        
-        if not root_group_id:
-            raise ValueError("Missing TIMECAMP_ROOT_GROUP_ID environment variable")
-        
-        # Parse ignored user IDs
-        ignored_user_ids = set()
-        if ignored_user_ids_str:
-            ignored_user_ids = {int(uid.strip()) for uid in ignored_user_ids_str.split(',') if uid.strip()}
-            logger.debug(f"Ignoring user IDs: {ignored_user_ids}")
-        
-        logger.debug(f"Using API key: {api_key[:4]}...{api_key[-4:]}")
-        logger.debug(f"Using domain: {domain}")
-        logger.debug(f"Using root group ID: {root_group_id}")
-        
-        # Initialize TimeCamp client and user synchronizer
-        timecamp = TimeCampAPI(api_key, domain)
-        user_sync = UserSynchronizer(timecamp, root_group_id, ignored_user_ids, show_external_id)
-        
-        # Get users file
-        users_file = get_users_file()
-        logger.info(f"Using users file: {users_file}")
-        
-        # Run synchronization
-        user_sync.sync(users_file, dry_run)
-        
+        config = TimeCampConfig.from_env()
+        logger.debug(f"Using API key: {config.api_key[:4]}...{config.api_key[-4:]}")
+        timecamp = TimeCampAPI(config)
+        user_sync = UserSynchronizer(timecamp, config)
+        user_sync.sync(get_users_file(), dry_run)
     except Exception as e:
         logger.error(f"Error during synchronization: {str(e)}")
         raise
@@ -614,7 +225,5 @@ def sync_users(dry_run=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Synchronize users with TimeCamp")
     parser.add_argument("--dry-run", action="store_true", help="Simulate actions without making changes")
-    args = parser.parse_args()
-    
     logger.info("Starting synchronization")
-    sync_users(dry_run=args.dry_run) 
+    sync_users(dry_run=parser.parse_args().dry_run) 

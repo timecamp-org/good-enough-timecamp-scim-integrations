@@ -20,25 +20,46 @@ class TimeCampAPI:
         }
         self.params = {}
 
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
+        """Make an API request with universal error handling."""
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        
+        # Merge default params with custom params if provided
+        if 'params' in kwargs:
+            params = {**self.params, **kwargs.pop('params')}
+        else:
+            params = self.params
+            
+        try:
+            response = requests.request(
+                method,
+                url,
+                headers=self.headers,
+                params=params,
+                **kwargs
+            )
+            logger.debug(f"API {method} {url}")
+            logger.debug(f"Request params: {params}")
+            logger.debug(f"Request data: {kwargs.get('data', kwargs.get('json', {}))}")
+            logger.debug(f"Response status: {response.status_code}")
+            logger.debug(f"Response content: {response.text}")
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            logger.error(f"API Error: {method} {url}")
+            logger.error(f"Status code: {getattr(e.response, 'status_code', 'N/A')}")
+            logger.error(f"Response content: {getattr(e.response, 'text', str(e))}")
+            raise
+
     def get_group_users(self, group_id: int) -> List[Dict[str, Any]]:
         """Get users in a specific group."""
-        response = requests.get(
-            f"{self.base_url}/group/{group_id}/user",
-            headers=self.headers,
-            params=self.params
-        )
-        response.raise_for_status()
+        response = self._make_request('GET', f"group/{group_id}/user")
         return response.json()
 
     def is_user_enabled(self, user_id: int) -> bool:
         """Check if a user is enabled."""
         params = {**self.params, "name[]": "disabled_user"}
-        response = requests.get(
-            f"{self.base_url}/user/{user_id}/setting",
-            headers=self.headers,
-            params=params
-        )
-        response.raise_for_status()
+        response = self._make_request('GET', f"user/{user_id}/setting", params=params)
         settings = response.json()
         return not (
             int(settings['userId']) == user_id and 
@@ -47,16 +68,9 @@ class TimeCampAPI:
         )
 
     def get_users(self) -> List[Dict[str, Any]]:
-        """Get all users with their group information."""
+        """Get all users with their group information.."""
         logger.debug(f"Fetching users from {self.base_url}/users")
-        response = requests.get(
-            f"{self.base_url}/users",
-            headers=self.headers,
-            params=self.params
-        )
-        # logger.debug(f"API Response Status: {response.status_code}")
-        # logger.debug(f"API Response Content: {response.content}")
-        response.raise_for_status()
+        response = self._make_request('GET', "users")
         entries = response.json()
 
         # Get group information for each user
@@ -83,12 +97,7 @@ class TimeCampAPI:
 
     def get_groups(self) -> List[Dict[str, Any]]:
         """Get all groups."""
-        response = requests.get(
-            f"{self.base_url}/group",
-            headers=self.headers,
-            params=self.params
-        )
-        response.raise_for_status()
+        response = self._make_request('GET', "group")
         return response.json()
 
     def add_user(self, email: str, name: str, group_id: int) -> Dict[str, Any]:
@@ -101,21 +110,7 @@ class TimeCampAPI:
             "send_email": "0",
             "email": [str(email)]
         }
-        # logger.debug(f"Adding user {email} to group {group_id}")
-        # logger.debug(f"Request URL: {self.base_url}/group/{group_id}/user")
-        # logger.debug(f"Request data: {data}")
-        
-        response = requests.post(
-            f"{self.base_url}/group/{group_id}/user",
-            headers=self.headers,
-            params=self.params,
-            json=data
-        )
-        
-        # logger.debug(f"Response status: {response.status_code}")
-        # logger.debug(f"Response content: {response.text}")
-        
-        response.raise_for_status()
+        response = self._make_request('POST', f"group/{group_id}/user", json=data)
         return response.json()
 
     def update_group_parent(self, group_id: int, parent_id: int) -> None:
@@ -124,14 +119,7 @@ class TimeCampAPI:
             "group_id": str(group_id),
             "parent_id": str(parent_id)
         }
-        json_data = json.dumps(data)  # Convert to JSON string
-        response = requests.post(
-            f"{self.base_url}/group",
-            headers=self.headers,
-            params=self.params,
-            json=data
-        )
-        response.raise_for_status()
+        self._make_request('POST', "group", json=data)
 
     def update_user_setting(self, user_id: int, name: str, value: str) -> None:
         """Update a user setting."""
@@ -139,13 +127,7 @@ class TimeCampAPI:
             "name": str(name),
             "value": str(value)
         }
-        response = requests.put(
-            f"{self.base_url}/user/{user_id}/setting",
-            headers=self.headers,
-            params=self.params,
-            json=data
-        )
-        response.raise_for_status()
+        self._make_request('PUT', f"user/{user_id}/setting", json=data)
 
     def update_user(self, user_id: int, fields: Dict[str, Any], group_id: Optional[int] = None) -> None:
         """Update user information."""
@@ -154,14 +136,7 @@ class TimeCampAPI:
                 "display_name": str(fields['fullName']),
                 "user_id": str(user_id)
             }
-            logger.debug(f"Updating user {user_id} with data: {data}")
-            response = requests.post(
-                f"{self.base_url}/user",
-                headers=self.headers,
-                params=self.params,
-                json=data
-            )
-            response.raise_for_status()
+            self._make_request('POST', "user", json=data)
 
         if 'isManager' in fields and group_id:
             role_id = "2" if fields['isManager'] else "3"  # 2 for manager, 3 for user
@@ -169,26 +144,14 @@ class TimeCampAPI:
                 "role_id": role_id,
                 "user_id": str(user_id)
             }
-            response = requests.put(
-                f"{self.base_url}/group/{group_id}/user",
-                headers=self.headers,
-                params=self.params,
-                json=data
-            )
-            response.raise_for_status()
+            self._make_request('PUT', f"group/{group_id}/user", json=data)
 
         if 'groupId' in fields and group_id:
             data = {
                 "group_id": str(fields['groupId']),
                 "user_id": str(user_id)
             }
-            response = requests.put(
-                f"{self.base_url}/group/{group_id}/user",
-                headers=self.headers,
-                params=self.params,
-                json=data
-            )
-            response.raise_for_status()
+            self._make_request('PUT', f"group/{group_id}/user", json=data)
 
     def add_group(self, name: str, parent_id: int) -> str:
         """Add a new group."""
@@ -196,33 +159,15 @@ class TimeCampAPI:
             "name": str(name),
             "parent_id": str(parent_id)
         }
-        json_data = json.dumps(data)  # Convert to JSON string
-        logger.debug(f"Adding group with data: {json_data}")
-        logger.debug(f"Request URL: {self.base_url}/group")
-        # logger.debug(f"Request headers: {self.headers}")
-        logger.debug(f"Request params: {self.params}")
-        
         max_retries = 5
         retry_delay = 15  # seconds
         
         for attempt in range(max_retries):
             try:
-                response = requests.put(
-                    f"{self.base_url}/group",
-                    headers=self.headers,
-                    params=self.params,
-                    data=json_data  # Send the properly formatted JSON string
-                )
-                
-                logger.debug(f"Response status: {response.status_code}")
-                # logger.debug(f"Response headers: {dict(response.headers)}")
-                logger.debug(f"Response content: {response.text}")
-                
-                response.raise_for_status()
+                response = self._make_request('PUT', "group", data=json.dumps(data))
                 response_data = response.json()
-                group_id = str(response_data.get("group_id"))
-                return group_id
-            except requests.exceptions.HTTPError as e:
+                return str(response_data.get("group_id"))
+            except requests.exceptions.HTTPError:
                 if attempt < max_retries - 1:
                     logger.debug(f"Attempt {attempt + 1} failed, retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
@@ -370,10 +315,7 @@ def sync_users(dry_run=False):
                     if source_user.get('status', '').lower() == 'active' and not tc_user.get('is_enabled', True):
                         if not dry_run:
                             logger.info(f"Activating user: {email} ({tc_user.get('display_name', 'unknown name')})")
-                            try:
-                                timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
-                            except requests.exceptions.RequestException as e:
-                                logger.error(f"Error activating user {email}: {str(e)}")
+                            timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
                         else:
                             logger.info(f"[DRY RUN] Would activate user: {email} ({tc_user.get('display_name', 'unknown name')})")
                     
@@ -385,6 +327,35 @@ def sync_users(dry_run=False):
                         new_full_path = source_user['department'] or 'root'
                         
                         if current_full_path != new_full_path:
+                            # Ensure all parts of the department path exist
+                            if source_user['department']:
+                                parts = [part.strip() for part in source_user['department'].split('/')]
+                                current_path = ''
+                                parent_id = None
+                                
+                                for part in parts:
+                                    if not part:
+                                        continue
+                                    if current_path:
+                                        current_path += '/'
+                                    current_path += part
+                                    
+                                    if current_path not in department_hierarchy:
+                                        if not dry_run:
+                                            logger.info(f"Creating missing group: {part} in path {current_path}")
+                                            effective_parent_id = int(parent_id) if parent_id is not None else root_group_id
+                                            group_id = timecamp.add_group(part, effective_parent_id)
+                                            group_name_to_id[part] = group_id
+                                            department_hierarchy[current_path] = int(group_id)
+                                        else:
+                                            logger.info(f"[DRY RUN] Would create missing group: {part} in path {current_path}")
+                                            department_hierarchy[current_path] = -1
+                                    
+                                    parent_id = department_hierarchy[current_path]
+                                
+                                # Update group_id to the last created/found group
+                                group_id = department_hierarchy[source_user['department']]
+                            
                             updates['groupId'] = group_id
                             changes.append(f"group from '{current_full_path}' to '{new_full_path}'")
                     
@@ -429,10 +400,7 @@ def sync_users(dry_run=False):
             if should_deactivate and tc_user.get('is_enabled', True):
                 if not dry_run:
                     logger.info(f"Deactivating user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
-                    try:
-                        timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
-                    except requests.exceptions.RequestException as e:
-                        logger.error(f"Error deactivating user {email}: {str(e)}")
+                    timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
                 else:
                     logger.info(f"[DRY RUN] Would deactivate user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
         

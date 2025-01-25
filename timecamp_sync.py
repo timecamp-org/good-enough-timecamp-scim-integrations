@@ -5,7 +5,7 @@ import argparse
 import requests
 from dotenv import load_dotenv
 from common.logger import setup_logger
-from typing import Optional, Dict, List, Any, Set
+from typing import Optional, Dict, List, Any, Set, Tuple
 
 logger = setup_logger()
 
@@ -366,6 +366,176 @@ class GroupSynchronizer:
             
         return current_paths
 
+class UserSynchronizer:
+    def __init__(self, api: TimeCampAPI, root_group_id: int, ignored_user_ids: Set[int], show_external_id: bool = True):
+        self.api = api
+        self.root_group_id = root_group_id
+        self.ignored_user_ids = ignored_user_ids
+        self.show_external_id = show_external_id
+        self.group_sync = GroupSynchronizer(api, root_group_id)
+
+    def _get_source_users(self, users_file: str) -> Tuple[Dict[str, Dict[str, Any]], Set[str]]:
+        """Read and process source users from file."""
+        with open(users_file, 'r') as f:
+            source_data = json.load(f)
+
+        department_paths = set()
+        for user in source_data['users']:
+            if user.get('department'):
+                user['department'] = '/'.join(part.strip() for part in user['department'].split('/') if part.strip())
+                if user['department']:
+                    department_paths.add(user['department'])
+            
+            if self.show_external_id and user.get('external_id'):
+                user['name'] = clean_name(f"{user['name']} - {user['external_id']}")
+            else:
+                user['name'] = clean_name(user['name'])
+
+        return {user['email']: user for user in source_data['users']}, department_paths
+
+    def _process_existing_user(self, email: str, source_user: Dict[str, Any], tc_user: Dict[str, Any], 
+                             group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
+        """Process updates for an existing user."""
+        if int(tc_user['user_id']) in self.ignored_user_ids:
+            logger.debug(f"Skipping ignored user: {email} (ID: {tc_user['user_id']})")
+            return
+
+        updates = {}
+        changes = []
+
+        # Check if name needs updating
+        if tc_user['display_name'] != source_user['name']:
+            updates['fullName'] = source_user['name']
+            changes.append(f"name from '{tc_user['display_name']}' to '{source_user['name']}'")
+
+        # Check if user should be activated
+        if source_user.get('status', '').lower() == 'active' and not tc_user.get('is_enabled', True):
+            if not dry_run:
+                logger.info(f"Activating user: {email} ({tc_user.get('display_name', 'unknown name')})")
+                self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
+            else:
+                logger.info(f"[DRY RUN] Would activate user: {email} ({tc_user.get('display_name', 'unknown name')})")
+
+        # Check if group needs updating
+        if group_info:
+            current_group_path = tc_user.get('group_path')
+            if current_group_path != source_user['department']:
+                logger.debug(f"User {email} current group: {current_group_path}, target group: {source_user['department']}")
+                updates['groupId'] = group_info['group_id']
+                changes.append(f"group from '{current_group_path or 'unknown'}' to '{source_user['department']}'")
+
+        if updates:
+            if not dry_run:
+                logger.info(f"Updating user {email}: {', '.join(changes)}")
+                self.api.update_user(tc_user['user_id'], updates, tc_user['group_id'])
+            else:
+                logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
+
+    def _process_new_user(self, email: str, source_user: Dict[str, Any], 
+                         group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
+        """Process creation of a new user."""
+        if source_user.get('status', '').lower() == 'active':
+            if not dry_run:
+                logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{source_user.get('department', 'root')}'")
+                self.api.add_user(email, source_user['name'], 
+                                group_info['group_id'] if group_info else self.root_group_id)
+            else:
+                logger.info(f"[DRY RUN] Would create user: {email} ({source_user['name']}) in group '{source_user.get('department', 'root')}'")
+        else:
+            logger.debug(f"Skipping creation of inactive user: {email} (status: {source_user.get('status', 'unknown')})")
+
+    def _process_deactivations(self, timecamp_users: Dict[str, Dict[str, Any]], 
+                             source_users: Dict[str, Dict[str, Any]], dry_run: bool = False) -> None:
+        """Process user deactivations."""
+        for email, tc_user in timecamp_users.items():
+            if int(tc_user['user_id']) in self.ignored_user_ids:
+                logger.debug(f"Skipping ignored user for deactivation: {email} (ID: {tc_user['user_id']})")
+                continue
+
+            should_deactivate = False
+            deactivation_reason = None
+
+            if email not in source_users:
+                should_deactivate = True
+                deactivation_reason = "not present in users.json"
+            elif source_users[email].get('status', '').lower() != 'active':
+                should_deactivate = True
+                deactivation_reason = f"status is {source_users[email].get('status', 'unknown')}"
+
+            if should_deactivate and tc_user.get('is_enabled', True):
+                if not dry_run:
+                    logger.info(f"Deactivating user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
+                    self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
+                else:
+                    logger.info(f"[DRY RUN] Would deactivate user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
+
+    def _prepare_timecamp_users(self, timecamp_users: List[Dict[str, Any]], 
+                              current_paths: Dict[str, Dict[str, Any]], root_group_name: Optional[str]) -> Dict[str, Dict[str, Any]]:
+        """Prepare TimeCamp users with group paths."""
+        for user in timecamp_users:
+            user['display_name'] = clean_name(user['display_name'])
+            group_id = user['group_id']
+            full_path = next(
+                (path for path, details in current_paths.items() 
+                 if str(details['group_id']) == str(group_id)),
+                None
+            )
+            if full_path and root_group_name and full_path.startswith(f"{root_group_name}/"):
+                user['group_path'] = full_path[len(root_group_name)+1:]
+            else:
+                user['group_path'] = full_path
+
+        return {user['email']: user for user in timecamp_users}
+
+    def sync(self, users_file: str, dry_run: bool = False) -> None:
+        """Synchronize users with TimeCamp."""
+        try:
+            # Get source users and department paths
+            source_users, department_paths = self._get_source_users(users_file)
+
+            # Synchronize group structure
+            logger.info("Synchronizing group structure")
+            group_structure = self.group_sync.sync_structure(department_paths, dry_run)
+
+            # Get and prepare current TimeCamp users
+            timecamp_users = self.api.get_users()
+            current_groups = self.api.get_groups()
+            current_paths = self.group_sync._build_group_paths(current_groups)
+
+            # Find root group name
+            root_group_name = next(
+                (group['name'] for group in current_groups 
+                 if str(group['group_id']) == str(self.root_group_id)),
+                None
+            )
+
+            # Prepare TimeCamp users with group paths
+            timecamp_users_map = self._prepare_timecamp_users(timecamp_users, current_paths, root_group_name)
+
+            # Process users
+            for email, source_user in source_users.items():
+                try:
+                    department = source_user.get('department')
+                    group_info = group_structure.get(department) if department else None
+
+                    if email in timecamp_users_map:
+                        self._process_existing_user(email, source_user, timecamp_users_map[email], 
+                                                 group_info, dry_run)
+                    else:
+                        self._process_new_user(email, source_user, group_info, dry_run)
+
+                except requests.exceptions.RequestException as e:
+                    logger.error(f"Error processing user {email}: {str(e)}")
+
+            # Handle deactivations
+            self._process_deactivations(timecamp_users_map, source_users, dry_run)
+
+            logger.info("Synchronization completed successfully")
+
+        except Exception as e:
+            logger.error(f"Error during synchronization: {str(e)}")
+            raise
+
 def get_users_file():
     """Get the users JSON file path."""
     if not os.path.exists("users.json"):
@@ -426,155 +596,16 @@ def sync_users(dry_run=False):
         logger.debug(f"Using domain: {domain}")
         logger.debug(f"Using root group ID: {root_group_id}")
         
-        # Initialize TimeCamp client and group synchronizer
+        # Initialize TimeCamp client and user synchronizer
         timecamp = TimeCampAPI(api_key, domain)
-        group_sync = GroupSynchronizer(timecamp, root_group_id)
+        user_sync = UserSynchronizer(timecamp, root_group_id, ignored_user_ids, show_external_id)
         
         # Get users file
         users_file = get_users_file()
         logger.info(f"Using users file: {users_file}")
         
-        # Read source users
-        with open(users_file, 'r') as f:
-            source_data = json.load(f)
-        
-        # Clean up department names and collect all unique department paths
-        department_paths = set()
-        for user in source_data['users']:
-            if user.get('department'):
-                user['department'] = '/'.join(part.strip() for part in user['department'].split('/') if part.strip())
-                if user['department']:  # Only add non-empty paths
-                    department_paths.add(user['department'])
-            # Format and clean user name
-            if show_external_id and user.get('external_id'):
-                user['name'] = clean_name(f"{user['name']} - {user['external_id']}")
-            else:
-                user['name'] = clean_name(user['name'])
-        
-        source_users = {user['email']: user for user in source_data['users']}
-        
-        # Synchronize group structure first
-        logger.info("Synchronizing group structure")
-        group_structure = group_sync.sync_structure(department_paths, dry_run)
-        
-        # Get current TimeCamp users
-        timecamp_users = timecamp.get_users()
-        timecamp_users_map = {user['email']: user for user in timecamp_users}
-        
-        # Clean display names in TimeCamp users
-        for user in timecamp_users:
-            user['display_name'] = clean_name(user['display_name'])
-        
-        # Get current groups and build path map for existing users
-        current_groups = timecamp.get_groups()
-        current_paths = group_sync._build_group_paths(current_groups)
-        
-        # Find root group name
-        root_group_name = next(
-            (group['name'] for group in current_groups 
-             if str(group['group_id']) == str(root_group_id)),
-            None
-        )
-        
-        # Add group paths to users
-        for user in timecamp_users:
-            group_id = user['group_id']
-            full_path = next(
-                (path for path, details in current_paths.items() 
-                 if str(details['group_id']) == str(group_id)),
-                None
-            )
-            # Remove root group name from path if present
-            if full_path and root_group_name and full_path.startswith(f"{root_group_name}/"):
-                user['group_path'] = full_path[len(root_group_name)+1:]
-            else:
-                user['group_path'] = full_path
-        
-        # Process users
-        for email, source_user in source_users.items():
-            try:
-                department = source_user['department']
-                group_info = group_structure.get(department) if department else None
-                
-                if email in timecamp_users_map:
-                    # Update existing user
-                    tc_user = timecamp_users_map[email]
-                    
-                    # Skip if user is in ignored list
-                    if int(tc_user['user_id']) in ignored_user_ids:
-                        logger.debug(f"Skipping ignored user: {email} (ID: {tc_user['user_id']})")
-                        continue
-                        
-                    updates = {}
-                    changes = []
-                    
-                    # Check if name needs updating
-                    if tc_user['display_name'] != source_user['name']:
-                        updates['fullName'] = source_user['name']
-                        changes.append(f"name from '{tc_user['display_name']}' to '{source_user['name']}'")
-                    
-                    # Check if user should be activated
-                    if source_user.get('status', '').lower() == 'active' and not tc_user.get('is_enabled', True):
-                        if not dry_run:
-                            logger.info(f"Activating user: {email} ({tc_user.get('display_name', 'unknown name')})")
-                            timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
-                        else:
-                            logger.info(f"[DRY RUN] Would activate user: {email} ({tc_user.get('display_name', 'unknown name')})")
-                    
-                    # Check if group needs updating
-                    if group_info:
-                        current_group_path = tc_user.get('group_path')
-                        if current_group_path != department:
-                            logger.debug(f"User {email} current group: {current_group_path}, target group: {department}")
-                            updates['groupId'] = group_info['group_id']
-                            changes.append(f"group from '{current_group_path or 'unknown'}' to '{department}'")
-                    
-                    if updates:
-                        if not dry_run:
-                            logger.info(f"Updating user {email}: {', '.join(changes)}")
-                            timecamp.update_user(tc_user['user_id'], updates, tc_user['group_id'])
-                        else:
-                            logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
-                else:
-                    # Create new user only if status is active
-                    if source_user.get('status', '').lower() == 'active':
-                        if not dry_run:
-                            logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{department or 'root'}'")
-                            timecamp.add_user(email, source_user['name'], group_info['group_id'] if group_info else root_group_id)
-                        else:
-                            logger.info(f"[DRY RUN] Would create user: {email} ({source_user['name']}) in group '{department or 'root'}'")
-                    else:
-                        logger.debug(f"Skipping creation of inactive user: {email} (status: {source_user.get('status', 'unknown')})")
-
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error processing user {email}: {str(e)}")
-        
-        # Handle user deactivation
-        for email, tc_user in timecamp_users_map.items():
-            # Skip if user is in ignored list
-            if int(tc_user['user_id']) in ignored_user_ids:
-                logger.debug(f"Skipping ignored user for deactivation: {email} (ID: {tc_user['user_id']})")
-                continue
-                
-            should_deactivate = False
-            deactivation_reason = None
-            
-            # Check if user exists in source and is active
-            if email not in source_users:
-                should_deactivate = True
-                deactivation_reason = "not present in users.json"
-            elif source_users[email].get('status', '').lower() != 'active':
-                should_deactivate = True
-                deactivation_reason = f"status is {source_users[email].get('status', 'unknown')}"
-            
-            if should_deactivate and tc_user.get('is_enabled', True):
-                if not dry_run:
-                    logger.info(f"Deactivating user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
-                    timecamp.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
-                else:
-                    logger.info(f"[DRY RUN] Would deactivate user: {email} ({tc_user.get('display_name', 'unknown name')}) - Reason: {deactivation_reason}")
-        
-        logger.info("Synchronization completed successfully")
+        # Run synchronization
+        user_sync.sync(users_file, dry_run)
         
     except Exception as e:
         logger.error(f"Error during synchronization: {str(e)}")

@@ -17,6 +17,15 @@ def fetch_bamboo_users():
         subdomain = os.getenv('BAMBOOHR_SUBDOMAIN')
         api_key = os.getenv('BAMBOOHR_API_KEY')
         
+        # Get exclude filter configuration
+        exclude_filter_str = os.getenv('BAMBOOHR_EXCLUDE_FILTER')
+        exclude_filter = None
+        if exclude_filter_str:
+            try:
+                exclude_filter = json.loads(exclude_filter_str)
+            except json.JSONDecodeError:
+                logger.warning("Invalid BAMBOOHR_EXCLUDE_FILTER format, filter will be skipped")
+        
         if not all([subdomain, api_key]):
             raise ValueError("Missing required environment variables")
         
@@ -24,32 +33,95 @@ def fetch_bamboo_users():
         auth_string = base64.b64encode(f"{api_key}:x".encode()).decode()
         headers = {
             'Accept': 'application/json',
+            'Content-Type': 'application/json',
             'Authorization': f'Basic {auth_string}'
         }
         
-        # BambooHR API endpoint for directory
-        url = f'https://api.bamboohr.com/api/gateway.php/{subdomain}/v1/employees/directory'
+        # BambooHR API endpoint for employee dataset
+        url = f'https://api.bamboohr.com/api/gateway.php/{subdomain}/v1/datasets/employee'
+        
+        # Prepare base filters
+        base_filters = [
+            {
+                "field": "employmentStatus",
+                "operator": "does_not_include",
+                "value": ["Terminated"]
+            },
+            {
+                "field": "status",
+                "operator": "does_not_include",
+                "value": ["Inactive"]
+            }
+        ]
+        
+        # Add exclude filter if configured
+        if exclude_filter:
+            base_filters.insert(0, exclude_filter)
+            logger.info("Using exclude filter from configuration")
+        
+        # Prepare base fields
+        fields = [
+            "employeeNumber",
+            "name",
+            "email",
+            "jobInformationDepartment",
+            "jobInformationDivision",
+            "isSupervisor",
+            "supervisorId"
+        ]
+        
+        # Prepare request payload
+        payload = {
+            "filters": {
+                "match": "all",
+                "filters": base_filters
+            },
+            "fields": fields
+        }
         
         logger.info("Fetching employees from BambooHR...")
         
-        # Get all employees
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+        all_employees = []
+        current_page = 1
         
-        employees = response.json().get('employees', [])
+        while True:
+            # Add pagination parameters to payload
+            payload['page'] = current_page
+            
+            # Get employees for current page
+            response = requests.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            
+            data = response.json()
+            employees = data.get('data', [])
+            pagination = data.get('pagination', {})
+            
+            all_employees.extend(employees)
+            
+            # Check if there are more pages
+            if not pagination.get('next_page'):
+                break
+                
+            current_page += 1
+            logger.info(f"Fetching page {current_page}...")
         
-        # Filter active employees and transform to our schema
+        # Transform to our schema
         users = []
-        for emp in employees:
-            if emp.get('status') == 'Active':
-                user = {
-                    "external_id": emp.get('id'),
-                    "name": f"{emp.get('firstName', '')} {emp.get('lastName', '')}".strip(),
-                    "email": emp.get('workEmail'),
-                    "department": emp.get('department', ''),
-                    "status": "active"
-                }
-                users.append(user)
+        for emp in all_employees:
+            # Join department and division with a forward slash if both exist
+            department = emp.get('jobInformationDepartment', '')
+            division = emp.get('jobInformationDivision', '')
+            combined_department = f"{department}/{division}" if department and division else department or division or ''
+            
+            user = {
+                "external_id": emp.get('employeeNumber'),
+                "name": emp.get('name', '').strip(),
+                "email": emp.get('email'),
+                "department": combined_department,
+                "status": "active",
+                "supervisor_id": emp.get('supervisorId', '')
+            }
+            users.append(user)
         
         # Prepare output data
         output_data = {"users": users}

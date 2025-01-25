@@ -280,7 +280,7 @@ def sync_users(dry_run=False):
                 user['department'] = '/'.join(part.strip() for part in user['department'].split('/') if part.strip())
             # Format user name with external_id if enabled
             if show_external_id and user.get('external_id'):
-                user['name'] = f"{user['name']} [{user['external_id']}]"
+                user['name'] = f"{user['name']} - {user['external_id']}"
         
         source_users = {user['email']: user for user in source_data['users']}
         

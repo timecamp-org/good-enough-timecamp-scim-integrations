@@ -2,6 +2,7 @@
 
 Scripts to synchronize users from various HR systems with TimeCamp. Currently supports:
 - BambooHR
+- Azure AD / Microsoft Entra ID (via SCIM)
 
 ## Setup
 
@@ -19,35 +20,88 @@ cp .env.sample .env
 
 ```mermaid
 graph TD
-    BH[1: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
+    BH[1a: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
     BH -->|saves| JSON[users.json]
+    AD[1b: Azure/Entra Fetcher] -->|use| SCIM[SCIM API]
+    AD -->|saves| JSON
+    AD -->|saves| GJSON[groups.json]
     TC[2: TimeCamp Synchronizer] -->|uses| JSON
+    TC -->|uses| GJSON
     TC -->|use| TAPI[TimeCamp API]
     
     style BH fill:#f9f,stroke:#333
+    style AD fill:#f9f,stroke:#333
     style TC fill:#9f9,stroke:#333
+```
+
+## Azure AD / Microsoft Entra ID Setup
+
+1. Register an application in Azure AD/Entra ID portal:
+   - Go to Azure Portal > Azure Active Directory > App registrations > New registration
+   - Name your application (e.g., "TimeCamp SCIM Integration")
+   - Select "Accounts in this organizational directory only"
+   - Click Register
+   - Note down the Application (client) ID and Directory (tenant) ID
+
+2. Create a client secret:
+   - Go to your app > Certificates & secrets > New client secret
+   - Give it a description (e.g., "SCIM Integration")
+   - Select an expiration (e.g., 24 months)
+   - Click Add
+   - IMMEDIATELY copy the "Value" column (NOT the Secret ID)
+   - ⚠️ The secret value will only be shown once and looks like `kv~8Q~...`
+   - If you copied the wrong value or lost it, create a new secret
+
+3. Configure API permissions:
+   - Go to your app > API permissions
+   - Click "Add a permission"
+   - Select "Microsoft Graph" > "Application permissions"
+   - Add these permissions:
+     * Directory.Read.All
+     * User.Read.All
+     * Group.Read.All
+   - Click "Grant admin consent" button
+
+4. Configure OAuth credentials in `.env`:
+```bash
+AZURE_TENANT_ID=your-tenant-id  # Directory (tenant) ID
+AZURE_CLIENT_ID=your-client-id  # Application (client) ID
+AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
+```
+
+5. Get and update the bearer token:
+```bash
+python3 azure_token.py
+```
+
+6. Proceed with user/group synchronization:
+```bash
+python3 azuread_fetch.py
 ```
 
 ## Testing
 
 Always test the integration first using these steps:
 
-1. Test BambooHR fetch:
+1. Test user fetch from your chosen source:
 ```bash
-# Fetch users from BambooHR and save to users.json
+# For BambooHR:
 python bamboohr_fetch.py
+
+# For Azure AD / Microsoft Entra ID:
+python azuread_fetch.py
 ```
 
-2. Review the generated `users.json` to ensure the data is correct. The file should match the format shown in `users.json.sample`:
+2. Review the generated files to ensure the data is correct:
+   - For both sources, check `users.json` matches the format shown in `users.json.sample`
+   - For Azure AD, also check `groups.json` for group memberships:
 ```json
 {
-  "users": [
+  "groups": [
     {
       "external_id": "123",
-      "name": "John Doe",
-      "email": "john.doe@example.com",
-      "department": "Engineering",
-      "status": "active"
+      "display_name": "Engineering Team",
+      "members": ["user1", "user2"]
     }
   ]
 }
@@ -72,10 +126,17 @@ To automate the synchronization, add these entries to your crontab:
 # Edit crontab
 crontab -e
 
-# Add these lines:
+# Add these lines (choose one source):
 
+# For BambooHR:
 # Fetch users from BambooHR every hour
 0 * * * * cd /path/to/project && python3 bamboohr_fetch.py
+
+# For Azure AD / Microsoft Entra ID:
+# Update bearer token 5 minutes before fetch
+55 * * * * cd /path/to/project && python3 azure_token.py
+# Fetch users and groups every hour
+0 * * * * cd /path/to/project && python3 azuread_fetch.py
 
 # Sync with TimeCamp 5 minutes after fetch
 5 * * * * cd /path/to/project && python3 timecamp_sync.py

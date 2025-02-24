@@ -22,11 +22,9 @@ cp .env.sample .env
 graph TD
     BH[1a: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
     BH -->|saves| JSON[users.json]
-    AD[1b: Azure/Entra Fetcher] -->|use| SCIM[SCIM API]
+    AD[1b: Azure/Entra Fetcher] -->|use| GRAPH[Microsoft Graph API]
     AD -->|saves| JSON
-    AD -->|saves| GJSON[groups.json]
     TC[2: TimeCamp Synchronizer] -->|uses| JSON
-    TC -->|uses| GJSON
     TC -->|use| TAPI[TimeCamp API]
     
     style BH fill:#f9f,stroke:#333
@@ -69,15 +67,19 @@ AZURE_CLIENT_ID=your-client-id  # Application (client) ID
 AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
 ```
 
-5. Get and update the bearer token:
+5. (Optional) Configure email preference:
+   - By default, the script uses the federated ID (userPrincipalName) as the primary email
+   - To use real email addresses (mail attribute) when available, add this to your `.env`:
 ```bash
-python3 azure_token.py
+AZURE_PREFER_REAL_EMAIL=true
 ```
 
-6. Proceed with user/group synchronization:
+6. Fetch users and groups from Azure AD:
 ```bash
 python3 azuread_fetch.py
 ```
+   - This script will automatically handle token management and fetch users and groups
+   - If the token expires or becomes invalid, the script will automatically refresh it
 
 ## Testing
 
@@ -94,18 +96,7 @@ python azuread_fetch.py
 
 2. Review the generated files to ensure the data is correct:
    - For both sources, check `users.json` matches the format shown in `users.json.sample`
-   - For Azure AD, also check `groups.json` for group memberships:
-```json
-{
-  "groups": [
-    {
-      "external_id": "123",
-      "display_name": "Engineering Team",
-      "members": ["user1", "user2"]
-    }
-  ]
-}
-```
+   - For Azure AD, the users.json file will include group memberships in the "groups" field for each user
 
 3. Test TimeCamp sync with dry-run:
 ```bash
@@ -133,9 +124,7 @@ crontab -e
 0 * * * * cd /path/to/project && python3 bamboohr_fetch.py
 
 # For Azure AD / Microsoft Entra ID:
-# Update bearer token 5 minutes before fetch
-55 * * * * cd /path/to/project && python3 azure_token.py
-# Fetch users and groups every hour
+# Fetch users and groups every hour (token refresh is handled automatically)
 0 * * * * cd /path/to/project && python3 azuread_fetch.py
 
 # Sync with TimeCamp 5 minutes after fetch
@@ -155,6 +144,9 @@ Notes:
 2. Ensure all required environment variables are set in `.env`
 3. Verify API keys have the necessary permissions
 4. For crontab issues, check system logs: `grep CRON /var/log/syslog`
+5. For Azure AD token issues:
+   - The script automatically handles token refresh when needed
+   - If you're still having issues, you can manually force a token refresh by deleting the `AZURE_BEARER_TOKEN` line from your `.env` file and running the script again
 
 ## Not Yet Implemented
 

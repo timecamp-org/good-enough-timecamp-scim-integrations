@@ -212,6 +212,80 @@ def update_azure_token(force_new=False):
         logger.error(f"Error with Azure token: {str(e)}")
         raise
 
+def fetch_group_members(bearer_token, group_id, headers, make_api_request):
+    """Fetch members of a specific Azure AD group.
+    
+    Args:
+        bearer_token (str): Valid Azure AD bearer token
+        group_id (str): The ID of the group to fetch members from
+        headers (dict): HTTP headers to use for the request
+        make_api_request (function): Function to make API requests with token refresh
+        
+    Returns:
+        list: List of user IDs who are members of the group
+    """
+    logger.info(f"Fetching members for group ID: {group_id}")
+    
+    members_url = f"https://graph.microsoft.com/v1.0/groups/{group_id}/members"
+    params = {
+        '$select': 'id',
+        '$top': 100
+    }
+    
+    member_ids = []
+    next_link = None
+    
+    while True:
+        # If we have a next link from a previous call, use it directly
+        if next_link:
+            data = make_api_request(next_link)
+        else:
+            data = make_api_request(members_url, params)
+        
+        resources = data.get('value', [])
+        
+        # Extract member IDs
+        for member in resources:
+            if member.get('@odata.type', '') == '#microsoft.graph.user':
+                member_ids.append(member.get('id'))
+        
+        # Check if there are more pages
+        next_link = data.get('@odata.nextLink')
+        if not next_link:
+            break
+    
+    logger.info(f"Found {len(member_ids)} members in group")
+    return member_ids
+
+def find_group_id_by_name(bearer_token, group_name, headers, make_api_request):
+    """Find a group's ID by its display name.
+    
+    Args:
+        bearer_token (str): Valid Azure AD bearer token
+        group_name (str): The display name of the group to find
+        headers (dict): HTTP headers to use for the request
+        make_api_request (function): Function to make API requests with token refresh
+        
+    Returns:
+        str: The group ID if found, None otherwise
+    """
+    logger.info(f"Looking up group ID for: {group_name}")
+    
+    # URL encode the filter value
+    encoded_name = requests.utils.quote(group_name)
+    groups_url = f"https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '{encoded_name}'"
+    
+    data = make_api_request(groups_url)
+    resources = data.get('value', [])
+    
+    if resources:
+        group_id = resources[0].get('id')
+        logger.info(f"Found group ID: {group_id} for group: {group_name}")
+        return group_id
+    
+    logger.warning(f"No group found with name: {group_name}")
+    return None
+
 def fetch_azure_users():
     """Fetch users from Azure AD via Microsoft Graph API and save them to JSON file."""
     try:
@@ -223,6 +297,9 @@ def fetch_azure_users():
         graph_endpoint = os.getenv('AZURE_SCIM_ENDPOINT')
         # Get email preference setting (default is to use federated ID if mail is not available)
         prefer_real_email = os.getenv('AZURE_PREFER_REAL_EMAIL', 'false').lower() == 'true'
+        # Get filter groups setting
+        filter_groups_str = os.getenv('AZURE_FILTER_GROUPS', '')
+        filter_groups = [g.strip() for g in filter_groups_str.split(',')] if filter_groups_str else []
         
         if not graph_endpoint:
             raise ValueError("Missing required environment variable: AZURE_SCIM_ENDPOINT")
@@ -258,6 +335,22 @@ def fetch_azure_users():
                     # Re-raise the exception for other errors or if we've already retried
                     raise
         
+        # If filter groups are specified, get the list of users in those groups
+        filtered_user_ids = set()
+        if filter_groups:
+            logger.info(f"Filtering users by groups: {filter_groups}")
+            for group_name in filter_groups:
+                if not group_name.strip():
+                    continue
+                    
+                group_id = find_group_id_by_name(bearer_token, group_name.strip(), headers, make_api_request)
+                if group_id:
+                    group_member_ids = fetch_group_members(bearer_token, group_id, headers, make_api_request)
+                    filtered_user_ids.update(group_member_ids)
+            
+            if not filtered_user_ids:
+                logger.warning("No users found in the specified groups. Will return empty user list.")
+        
         # Fetch Users
         logger.info("Fetching users from Azure AD...")
         users = []
@@ -284,6 +377,10 @@ def fetch_azure_users():
             # Transform to our schema
             for user in resources:
                 user_id = user.get('id')
+                
+                # Skip users not in filtered groups if filtering is active
+                if filter_groups and user_id not in filtered_user_ids:
+                    continue
                 
                 # Handle email based on preference setting
                 mail = user.get('mail')

@@ -212,8 +212,8 @@ def update_azure_token(force_new=False):
         logger.error(f"Error with Azure token: {str(e)}")
         raise
 
-def fetch_azure_users_and_groups():
-    """Fetch users and groups from Azure AD via Microsoft Graph API and save them to JSON file."""
+def fetch_azure_users():
+    """Fetch users from Azure AD via Microsoft Graph API and save them to JSON file."""
     try:
         # First, ensure we have a valid token
         bearer_token = update_azure_token()
@@ -233,20 +233,6 @@ def fetch_azure_users_and_groups():
             'Accept': 'application/json',
             'Content-Type': 'application/json'
         }
-        
-        # Fetch Groups first to build a mapping of users to groups
-        logger.info("Fetching groups from Azure AD...")
-        groups = {}
-        user_to_groups = {}
-        
-        # Microsoft Graph API for groups
-        groups_url = graph_endpoint.replace('/users', '/groups')
-        params = {
-            '$select': 'id,displayName',
-            '$top': 100
-        }
-        
-        next_link = None
         
         # Function to handle API requests with token refresh on 401 errors
         def make_api_request(url, params=None, retry_count=0):
@@ -271,39 +257,6 @@ def fetch_azure_users_and_groups():
                 else:
                     # Re-raise the exception for other errors or if we've already retried
                     raise
-        
-        while True:
-            # If we have a next link from a previous call, use it directly
-            if next_link:
-                data = make_api_request(next_link)
-            else:
-                data = make_api_request(groups_url, params)
-            
-            resources = data.get('value', [])
-            
-            # Process each group
-            for group in resources:
-                group_id = group.get('id')
-                group_name = normalize_text(group.get('displayName', '').strip())
-                groups[group_id] = group_name
-                
-                # Get group members using a separate call
-                members_url = f"{groups_url}/{group_id}/members"
-                members_data = make_api_request(members_url)
-                
-                # Add each member to the user_to_groups mapping
-                for member in members_data.get('value', []):
-                    member_id = member.get('id')
-                    if member_id not in user_to_groups:
-                        user_to_groups[member_id] = []
-                    user_to_groups[member_id].append(group_name)
-            
-            # Check if there are more pages
-            next_link = data.get('@odata.nextLink')
-            if not next_link:
-                break
-                
-            logger.info(f"Fetched {len(groups)} groups so far...")
         
         # Fetch Users
         logger.info("Fetching users from Azure AD...")
@@ -357,8 +310,8 @@ def fetch_azure_users_and_groups():
                     "department": normalize_text(user.get('department', '')),
                     "status": "active",  # Graph API doesn't directly expose this in the same way
                     "supervisor_id": manager_id,
-                    "groups": user_to_groups.get(user_id, [])
                 }
+                
                 users.append(transformed_user)
             
             # Check if there are more pages
@@ -373,7 +326,7 @@ def fetch_azure_users_and_groups():
         with open("users.json", 'w', encoding='utf-8') as f:
             json.dump(users_output, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Successfully saved {len(users)} users to users.json with group information")
+        logger.info(f"Successfully saved {len(users)} users to users.json")
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching from Azure AD Graph API: {str(e)}")
@@ -383,4 +336,4 @@ def fetch_azure_users_and_groups():
         raise
 
 if __name__ == "__main__":
-    fetch_azure_users_and_groups() 
+    fetch_azure_users() 

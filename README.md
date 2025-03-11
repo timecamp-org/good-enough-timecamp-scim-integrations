@@ -153,12 +153,12 @@ Notes:
 - User roles
 - TimeCamp groups based on supervisor, not department and division
 - Send email on invite
-
 - Performance
 - Setting to sync only selected things (like only new users)
 - Setting to move disabled users to specific group_id
 - Remove empty groups
 - Change of email (use external_id to identify)
+- Added manually ❌
 
 ## Test Cases
 

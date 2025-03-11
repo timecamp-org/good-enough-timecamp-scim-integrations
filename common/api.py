@@ -26,8 +26,8 @@ class TimeCampAPI:
             try:
                 response = requests.request(method, url, headers=self.headers, **kwargs)
                 logger.debug(f"Response status: {response.status_code}")
-                logger.debug(f"Response headers: {dict(response.headers)}")
-                logger.debug(f"Response content: {response.text[:1000]}")  # First 1000 chars to avoid huge logs
+                # logger.debug(f"Response headers: {dict(response.headers)}")
+                # logger.debug(f"Response content: {response.text[:1000]}")  # First 1000 chars to avoid huge logs
                 
                 if response.status_code == 429 and attempt < max_retries - 1:
                     time.sleep(retry_delay * (attempt + 1))
@@ -47,7 +47,8 @@ class TimeCampAPI:
     def get_users(self) -> List[Dict[str, Any]]:
         """Get all users with their enabled status."""
         users = self._make_request('GET', "users").json()
-        
+        # logger.debug(f"Users: {users}")
+
         # Get enabled status for all users in bulk
         user_ids = [int(user['user_id']) for user in users]
         enabled_statuses = self.are_users_enabled(user_ids)

@@ -106,8 +106,11 @@ class UserSynchronizer:
                 if user['department']:
                     department_paths.add(user['department'])
             user['name'] = clean_name(f"{user['name']} - {user['external_id']}" if self.config.show_external_id and user.get('external_id') else user['name'])
+            # Ensure email is lowercase
+            if 'email' in user:
+                user['email'] = user['email'].lower()
 
-        return {user['email']: user for user in source_data['users']}, department_paths
+        return {user['email'].lower(): user for user in source_data['users']}, department_paths
 
     def _process_existing_user(self, email: str, source_user: Dict[str, Any], tc_user: Dict[str, Any], 
                              group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
@@ -181,7 +184,10 @@ class UserSynchronizer:
             full_path = next((path for path, details in current_paths.items() 
                             if str(details['group_id']) == str(user['group_id'])), None)
             user['group_path'] = full_path[len(root_group_name)+1:] if full_path and root_group_name and full_path.startswith(f"{root_group_name}/") else full_path
-        return {user['email']: user for user in timecamp_users}
+            # Ensure email is lowercase
+            if 'email' in user:
+                user['email'] = user['email'].lower()
+        return {user['email'].lower(): user for user in timecamp_users}
 
     def sync(self, users_file: str, dry_run: bool = False) -> None:
         try:

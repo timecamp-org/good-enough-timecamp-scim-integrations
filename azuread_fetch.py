@@ -403,7 +403,7 @@ def fetch_azure_users():
                 transformed_user = {
                     "external_id": user_id,
                     "name": display_name,
-                    "email": email,
+                    "email": email.lower(),
                     "department": normalize_text(user.get('department', '')),
                     "status": "active",  # Graph API doesn't directly expose this in the same way
                     "supervisor_id": manager_id,

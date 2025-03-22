@@ -158,13 +158,15 @@ Notes:
 5. For Azure AD token issues:
    - The script automatically handles token refresh when needed
    - If you're still having issues, you can manually force a token refresh by deleting the `AZURE_BEARER_TOKEN` line from your `.env` file and running the script again
+6. Run script with `--debug` param
 
 ## Not Yet Implemented
 
 - Setting to sync only selected things (like only new users)
 - Setting to move disabled users to specific group_id
 - Remove empty groups
-- Change of email (use external_id to identify)
+- Change of email (use external_id to identify user)
+- Refactor deparments and use array instead of string
 
 ## Test Cases
 
@@ -177,6 +179,7 @@ Notes:
 - User added with empty department ✅
 - Group name with whitespaces near / ✅
 - Setting enabled to add external_id to user name ✅
+- Don't send automatic email when user is created ✅
 
 ## License
 

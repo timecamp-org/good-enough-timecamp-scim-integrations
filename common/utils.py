@@ -90,9 +90,20 @@ def clean_department_path(path: Optional[str], config: Optional[TimeCampConfig] 
     # Skip departments if config is provided and skip_departments is set
     if config and config.skip_departments and config.skip_departments.strip():
         skip_prefix = config.skip_departments.strip()
-        if normalized_path.startswith(skip_prefix):
-            if normalized_path == skip_prefix:
-                return ""
-            return normalized_path[len(skip_prefix) + 1:]  # +1 for the trailing slash
+        
+        # Check if the normalized path exactly matches the skip_departments
+        if normalized_path == skip_prefix:
+            return ""
+            
+        # Check if it's a prefix, but only if it's a full component match
+        # For example: if skip is "foo" and path is "foo/bar", it will match
+        # but if skip is "fo" and path is "foo/bar", it won't match
+        parts = normalized_path.split('/')
+        skip_parts = skip_prefix.split('/')
+        
+        # Only match if all skip parts match exactly the beginning of the path
+        if (len(parts) >= len(skip_parts) and 
+            all(parts[i] == skip_parts[i] for i in range(len(skip_parts)))):
+            return '/'.join(parts[len(skip_parts):])
             
     return normalized_path 

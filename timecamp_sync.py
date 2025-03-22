@@ -227,12 +227,24 @@ class UserSynchronizer:
             if full_path and root_group_name and full_path.startswith(f"{root_group_name}/"):
                 # Remove root group prefix
                 group_path = full_path[len(root_group_name)+1:]
+                
                 # Apply skip_departments if configured
-                if self.config.skip_departments and self.config.skip_departments.strip() and group_path.startswith(self.config.skip_departments):
-                    if group_path == self.config.skip_departments:
+                if self.config.skip_departments and self.config.skip_departments.strip():
+                    skip_prefix = self.config.skip_departments.strip()
+                    
+                    # Check if the group_path exactly matches the skip_departments
+                    if group_path == skip_prefix:
                         group_path = ""
                     else:
-                        group_path = group_path[len(self.config.skip_departments)+1:]
+                        # Check if it's a prefix, but only if it's a full component match
+                        parts = group_path.split('/')
+                        skip_parts = skip_prefix.split('/')
+                        
+                        # Only match if all skip parts match exactly the beginning of the path
+                        if (len(parts) >= len(skip_parts) and 
+                            all(parts[i] == skip_parts[i] for i in range(len(skip_parts)))):
+                            group_path = '/'.join(parts[len(skip_parts):])
+                
                 user['group_path'] = group_path
             else:
                 user['group_path'] = full_path

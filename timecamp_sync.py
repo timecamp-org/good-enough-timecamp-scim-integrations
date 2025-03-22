@@ -9,6 +9,7 @@ from common.utils import TimeCampConfig, clean_name, get_users_file, clean_depar
 from typing import Optional, Dict, List, Any, Set, Tuple
 from common.api import TimeCampAPI
 
+# Initialize logger with default level (will be updated in main)
 logger = setup_logger('timecamp_sync')
 
 class GroupSynchronizer:
@@ -36,8 +37,10 @@ class GroupSynchronizer:
         return path_map
 
     def sync_structure(self, department_paths: Set[str], dry_run: bool = False) -> Dict[str, Dict[str, Any]]:
+        logger.debug(f"Department paths to sync: {department_paths}")
         current_groups = self.api.get_groups()
         current_paths = self._build_group_paths(current_groups)
+        logger.debug(f"Current paths in TimeCamp: {list(current_paths.keys())}")
         groups_by_parent = {}
         
         for group in current_groups:
@@ -48,6 +51,7 @@ class GroupSynchronizer:
 
         for full_path in sorted(department_paths, key=lambda x: len(x.split('/'))):
             if not full_path or full_path in current_paths:
+                logger.debug(f"Skipping existing path: {full_path}")
                 continue
 
             parts = [p.strip() for p in full_path.split('/') if p.strip()]
@@ -59,6 +63,7 @@ class GroupSynchronizer:
                 existing_group = groups_by_parent.get(parent_id, {}).get(part)
 
                 if existing_group:
+                    logger.debug(f"Found existing group: {part} in {current_path}")
                     group_id = existing_group['group_id']
                     current_paths[current_path] = {
                         'group_id': group_id, 'name': part,
@@ -81,12 +86,15 @@ class GroupSynchronizer:
                         }
                         parent_id = str(group_id)
                     else:
+                        logger.info(f"[DRY RUN] Would create group: {part} in path {current_path}")
                         current_paths[current_path] = {
                             'group_id': -1, 'name': part,
                             'parent_path': '/'.join(parts[:i]) if i > 0 else None,
                             'parent_id': parent_id
                         }
                         parent_id = '-1'
+        
+        logger.debug(f"Final synced paths: {list(current_paths.keys())}")
         return current_paths
 
 class UserSynchronizer:
@@ -102,7 +110,7 @@ class UserSynchronizer:
         department_paths = set()
         for user in source_data['users']:
             if user.get('department'):
-                user['department'] = clean_department_path(user['department'])
+                user['department'] = clean_department_path(user['department'], self.config)
                 if user['department']:
                     department_paths.add(user['department'])
             user['name'] = clean_name(f"{user['name']} - {user['external_id']}" if self.config.show_external_id and user.get('external_id') else user['name'])
@@ -118,6 +126,14 @@ class UserSynchronizer:
             logger.debug(f"Skipping ignored user: {email} (ID: {tc_user['user_id']})")
             return
 
+        logger.debug(f"Processing user {email}")
+        logger.debug(f"  Current TC group: {tc_user.get('group_path')} (ID: {tc_user.get('group_id')})")
+        logger.debug(f"  Target group from source: {source_user.get('department')}")
+        if group_info:
+            logger.debug(f"  Group info found: {group_info.get('name')} (ID: {group_info.get('group_id')})")
+        else:
+            logger.debug(f"  No group info found for: {source_user.get('department')}")
+
         updates, changes = {}, []
         if tc_user['display_name'] != source_user['name']:
             updates['fullName'] = source_user['name']
@@ -130,23 +146,48 @@ class UserSynchronizer:
             else:
                 logger.info(f"[DRY RUN] Would activate user: {email}")
 
-        if group_info and tc_user.get('group_path') != source_user['department']:
-            updates['groupId'] = group_info['group_id']
-            changes.append(f"group from '{tc_user.get('group_path', 'unknown')}' to '{source_user['department']}'")
+        # Check both path and ID to determine if group change is needed
+        needs_group_update = False
+        
+        # Handle empty department - should be in root group
+        if not source_user.get('department') and str(tc_user.get('group_id')) != str(self.config.root_group_id):
+            needs_group_update = True
+            updates['groupId'] = self.config.root_group_id
+            changes.append(f"group from '{tc_user.get('group_path', 'unknown')}' (ID: {tc_user.get('group_id')}) to 'root' (ID: {self.config.root_group_id})")
+        # Handle normal department assignment
+        elif group_info:
+            if tc_user.get('group_path') != source_user.get('department'):
+                needs_group_update = True
+            elif str(tc_user.get('group_id')) != str(group_info.get('group_id')):
+                needs_group_update = True
+                logger.debug(f"  Group path matches but IDs differ: {tc_user.get('group_id')} vs {group_info.get('group_id')}")
+                
+            if needs_group_update:
+                updates['groupId'] = group_info['group_id']
+                changes.append(f"group from '{tc_user.get('group_path', 'unknown')}' (ID: {tc_user.get('group_id')}) to '{source_user['department']}' (ID: {group_info['group_id']})")
 
         if updates and not dry_run:
             logger.info(f"Updating user {email}: {', '.join(changes)}")
             self.api.update_user(tc_user['user_id'], updates, tc_user['group_id'])
+        elif updates:
+            logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
 
     def _process_new_user(self, email: str, source_user: Dict[str, Any], 
                          group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
         if source_user.get('status', '').lower() == 'active':
             if not dry_run:
-                logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{source_user.get('department', 'root')}'")
-                self.api.add_user(email, source_user['name'], 
-                                group_info['group_id'] if group_info else self.config.root_group_id)
+                target_group_id = self.config.root_group_id
+                group_name = "root"
+                
+                if group_info:
+                    target_group_id = group_info['group_id']
+                    group_name = source_user.get('department', 'root')
+                
+                logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{group_name}'")
+                self.api.add_user(email, source_user['name'], target_group_id)
             else:
-                logger.info(f"[DRY RUN] Would create user: {email}")
+                target_group = source_user.get('department', 'root')
+                logger.info(f"[DRY RUN] Would create user: {email} in group '{target_group}'")
 
     def _process_deactivations(self, timecamp_users: Dict[str, Dict[str, Any]], 
                              source_users: Dict[str, Dict[str, Any]], dry_run: bool = False) -> None:
@@ -183,7 +224,18 @@ class UserSynchronizer:
             user['display_name'] = clean_name(user['display_name'])
             full_path = next((path for path, details in current_paths.items() 
                             if str(details['group_id']) == str(user['group_id'])), None)
-            user['group_path'] = full_path[len(root_group_name)+1:] if full_path and root_group_name and full_path.startswith(f"{root_group_name}/") else full_path
+            if full_path and root_group_name and full_path.startswith(f"{root_group_name}/"):
+                # Remove root group prefix
+                group_path = full_path[len(root_group_name)+1:]
+                # Apply skip_departments if configured
+                if self.config.skip_departments and self.config.skip_departments.strip() and group_path.startswith(self.config.skip_departments):
+                    if group_path == self.config.skip_departments:
+                        group_path = ""
+                    else:
+                        group_path = group_path[len(self.config.skip_departments)+1:]
+                user['group_path'] = group_path
+            else:
+                user['group_path'] = full_path
             # Ensure email is lowercase
             if 'email' in user:
                 user['email'] = user['email'].lower()
@@ -217,8 +269,12 @@ class UserSynchronizer:
             logger.error(f"Error during synchronization: {str(e)}")
             raise
 
-def sync_users(dry_run=False):
+def sync_users(dry_run=False, debug=False):
     try:
+        # Update logger with debug setting
+        global logger
+        logger = setup_logger('timecamp_sync', debug)
+        
         config = TimeCampConfig.from_env()
         logger.debug(f"Using API key: {config.api_key[:4]}...{config.api_key[-4:]}")
         timecamp = TimeCampAPI(config)
@@ -229,7 +285,18 @@ def sync_users(dry_run=False):
         raise
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Synchronize users with TimeCamp")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate actions without making changes")
+    parser = argparse.ArgumentParser(
+        description="Synchronize users and groups between an external user source and TimeCamp",
+        epilog="By default, only INFO level logs are displayed. Use --debug for detailed logging."
+    )
+    parser.add_argument("--dry-run", action="store_true", 
+                      help="Simulate actions without making changes to TimeCamp")
+    parser.add_argument("--debug", action="store_true", 
+                      help="Enable debug logging to see detailed information about API calls and processing")
+    args = parser.parse_args()
+    
+    # Set up logger with debug flag
+    logger = setup_logger('timecamp_sync', args.debug)
+    
     logger.info("Starting synchronization")
-    sync_users(dry_run=parser.parse_args().dry_run) 
+    sync_users(dry_run=args.dry_run, debug=args.debug) 

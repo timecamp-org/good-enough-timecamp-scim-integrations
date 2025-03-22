@@ -40,6 +40,7 @@ graph TD
 - Optionally set `LDAP_PAGE_SIZE` to control the number of results retrieved per page (default is 1000)
 - Optionally set `LDAP_USE_SAMACCOUNTNAME=true` to generate email addresses from sAMAccountName rather than using the mail attribute
 - Optionally set `LDAP_USE_OU_STRUCTURE=true` to use the organizational unit (OU) structure from user's DN as the department value instead of the department attribute
+- Optionally set other params like `TIMECAMP_USE_SUPERVISOR_GROUPS=false`
 - Run `python ldap_fetch.py` to fetch users from LDAP
 - Note: When using sAMAccountName for email, the original mail attribute is always included as `real_email` field if available
 

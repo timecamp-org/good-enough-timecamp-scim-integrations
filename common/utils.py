@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Set
+from typing import Optional, Set, Dict, Any
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
@@ -12,6 +12,7 @@ class TimeCampConfig:
     ignored_user_ids: Set[int]
     show_external_id: bool
     skip_departments: str
+    use_supervisor_groups: bool
 
     @classmethod
     def from_env(cls) -> 'TimeCampConfig':
@@ -31,6 +32,7 @@ class TimeCampConfig:
         ignored_user_ids_str = os.getenv('TIMECAMP_IGNORED_USER_IDS', '')
         show_external_id = os.getenv('TIMECAMP_SHOW_EXTERNAL_ID', 'true').lower() == 'true'
         skip_departments = os.getenv('TIMECAMP_SKIP_DEPARTMENTS', '').strip()
+        use_supervisor_groups = os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true'
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -45,7 +47,8 @@ class TimeCampConfig:
             root_group_id=int(root_group_id),
             ignored_user_ids=ignored_user_ids,
             show_external_id=show_external_id,
-            skip_departments=skip_departments
+            skip_departments=skip_departments,
+            use_supervisor_groups=use_supervisor_groups
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

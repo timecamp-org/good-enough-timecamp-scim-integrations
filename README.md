@@ -2,7 +2,8 @@
 
 Scripts to synchronize users from various HR systems with TimeCamp. Currently supports:
 - BambooHR
-- Azure AD / Microsoft Entra ID (via SCIM)
+- Azure AD / Microsoft Entra ID
+- LDAP
 
 ## Setup
 
@@ -31,6 +32,16 @@ graph TD
     style AD fill:#f9f,stroke:#333
     style TC fill:#9f9,stroke:#333
 ```
+
+## LDAP
+
+- Set the environment variables: `LDAP_HOST`, `LDAP_PORT`, `LDAP_DOMAIN`, `LDAP_DN`, `LDAP_USERNAME`, and `LDAP_PASSWORD`
+- Optionally set `LDAP_FILTER` to customize the user filter query (default filter includes only active users)
+- Optionally set `LDAP_PAGE_SIZE` to control the number of results retrieved per page (default is 1000)
+- Optionally set `LDAP_USE_SAMACCOUNTNAME=true` to generate email addresses from sAMAccountName rather than using the mail attribute
+- Optionally set `LDAP_USE_OU_STRUCTURE=true` to use the organizational unit (OU) structure from user's DN as the department value instead of the department attribute
+- Run `python ldap_fetch.py` to fetch users from LDAP
+- Note: When using sAMAccountName for email, the original mail attribute is always included as `real_email` field if available
 
 ## Azure AD / Microsoft Entra ID Setup
 
@@ -150,15 +161,10 @@ Notes:
 
 ## Not Yet Implemented
 
-- User roles
-- TimeCamp groups based on supervisor, not department and division
-- Send email on invite
-- Performance
 - Setting to sync only selected things (like only new users)
 - Setting to move disabled users to specific group_id
 - Remove empty groups
 - Change of email (use external_id to identify)
-- Added manually ❌
 
 ## Test Cases
 

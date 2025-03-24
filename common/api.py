@@ -1,6 +1,6 @@
 import time
 import requests
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from common.logger import setup_logger
 from common.utils import TimeCampConfig
 
@@ -104,6 +104,43 @@ class TimeCampAPI:
 
     def update_user_setting(self, user_id: int, name: str, value: str) -> None:
         self._make_request('PUT', f"user/{user_id}/setting", json={"name": name, "value": value})
+
+    def set_additional_email(self, user_id: int, email: str) -> None:
+        """Set additional email for a user."""
+        self._make_request('PUT', f"user/{user_id}/setting", json={"name": "additional_email", "value": email})
+
+    def get_additional_emails(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, Optional[str]]:
+        """Get additional email settings for multiple users in bulk."""
+        result = {}
+        for i in range(0, len(user_ids), batch_size):
+            batch = user_ids[i:i + batch_size]
+            response = self._make_request('GET', f"user/{','.join(map(str, batch))}/setting", 
+                                        params={"name[]": "additional_email"})
+            settings = response.json()
+            
+            # Handle both possible API response formats
+            if isinstance(settings, dict):
+                # New API format where settings is a dict with user_id keys
+                for user_id in batch:
+                    user_settings = settings.get(str(user_id), [])
+                    if isinstance(user_settings, list):
+                        additional_email = next(
+                            (s.get('value') for s in user_settings 
+                             if s.get('name') == 'additional_email'),
+                            None
+                        )
+                        result[user_id] = additional_email
+                    else:
+                        result[user_id] = None
+            else:
+                # Old API format where settings is a list
+                for user_id in batch:
+                    user_settings = [s for s in settings 
+                                   if str(s.get('userId', '')) == str(user_id) 
+                                   and s.get('name') == 'additional_email']
+                    result[user_id] = user_settings[0].get('value') if user_settings else None
+        
+        return result
 
     def are_users_enabled(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, bool]:
         """Check if multiple users are enabled in bulk."""

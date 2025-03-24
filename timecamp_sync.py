@@ -211,7 +211,9 @@ class UserSynchronizer:
                 logger.info(f"[DRY RUN] Would activate user: {email}")
 
     def _process_existing_user(self, email: str, source_user: Dict[str, Any], tc_user: Dict[str, Any], 
-                             group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
+                             group_info: Optional[Dict[str, Any]], 
+                             current_additional_emails: Dict[int, Optional[str]],
+                             dry_run: bool = False) -> None:
         """Process an existing user and update their information if needed."""
         if int(tc_user['user_id']) in self.config.ignored_user_ids:
             logger.debug(f"Skipping ignored user: {email} (ID: {tc_user['user_id']})")
@@ -233,6 +235,18 @@ class UserSynchronizer:
 
         # Check if group needs to be updated
         _, group_updates, group_changes = self._check_user_group_update(source_user, tc_user, group_info)
+        
+        # Handle real_email if present
+        if source_user.get('real_email'):
+            current_email = current_additional_emails.get(int(tc_user['user_id']))
+            if current_email != source_user['real_email']:
+                if not dry_run:
+                    logger.info(f"Updating additional email for user {email}: {current_email} -> {source_user['real_email']}")
+                    self.api.set_additional_email(tc_user['user_id'], source_user['real_email'])
+                else:
+                    logger.info(f"[DRY RUN] Would update additional email for user {email}: {current_email} -> {source_user['real_email']}")
+            else:
+                logger.debug(f"Additional email for user {email} is already set to {current_email}")
         
         # Combine all updates and changes
         updates = {**name_updates, **group_updates}
@@ -261,9 +275,16 @@ class UserSynchronizer:
         
         if not dry_run:
             logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{group_name}'")
-            self.api.add_user(email, source_user['name'], target_group_id)
+            response = self.api.add_user(email, source_user['name'], target_group_id)
+            
+            # Set additional email if present
+            if source_user.get('real_email'):
+                logger.info(f"Setting additional email for new user {email}: {source_user['real_email']}")
+                self.api.set_additional_email(response['user_id'], source_user['real_email'])
         else:
             logger.info(f"[DRY RUN] Would create user: {email} in group '{group_name}'")
+            if source_user.get('real_email'):
+                logger.info(f"[DRY RUN] Would set additional email for new user {email}: {source_user['real_email']}")
 
     def _get_deactivation_reason(self, email: str, source_users: Dict[str, Dict[str, Any]]) -> Optional[str]:
         """Determine if a user should be deactivated and return the reason."""
@@ -302,12 +323,27 @@ class UserSynchronizer:
                      group_structure: Dict[str, Dict[str, Any]],
                      dry_run: bool = False) -> None:
         """Process all users from source data, updating existing users and creating new ones."""
+        # Get all user IDs that need additional email check
+        user_ids_to_check = [
+            int(tc_user['user_id']) 
+            for email, tc_user in timecamp_users_map.items()
+            if source_users.get(email, {}).get('real_email')
+        ]
+        
+        # Get current additional email settings in batch
+        current_additional_emails = {}
+        if user_ids_to_check:
+            current_additional_emails = self.api.get_additional_emails(user_ids_to_check)
+        
         for email, source_user in source_users.items():
             try:
                 group_info = group_structure.get(source_user.get('department'))
                 
                 if email in timecamp_users_map:
-                    self._process_existing_user(email, source_user, timecamp_users_map[email], group_info, dry_run)
+                    self._process_existing_user(
+                        email, source_user, timecamp_users_map[email], 
+                        group_info, current_additional_emails, dry_run
+                    )
                 else:
                     self._process_new_user(email, source_user, group_info, dry_run)
             except Exception as e:

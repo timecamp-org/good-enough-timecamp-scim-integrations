@@ -240,6 +240,7 @@ class UserSynchronizer:
     def _process_existing_user(self, email: str, source_user: Dict[str, Any], tc_user: Dict[str, Any], 
                              group_info: Optional[Dict[str, Any]], 
                              current_additional_emails: Dict[int, Optional[str]],
+                             current_external_ids: Dict[int, Optional[str]],
                              current_roles: Dict[str, List[Dict[str, str]]],
                              dry_run: bool = False) -> None:
         """Process an existing user and update their information if needed."""
@@ -287,6 +288,18 @@ class UserSynchronizer:
             else:
                 logger.debug(f"Additional email for user {email} is already set to {current_email}")
         
+        # Handle external_id if present
+        if source_user.get('external_id'):
+            current_ext_id = current_external_ids.get(int(tc_user['user_id']))
+            if current_ext_id != source_user['external_id']:
+                if not dry_run:
+                    logger.info(f"Updating external ID for user {email}: {current_ext_id} -> {source_user['external_id']}")
+                    self.api.update_user_setting(tc_user['user_id'], 'external_id', source_user['external_id'])
+                else:
+                    logger.info(f"[DRY RUN] Would update external ID for user {email}: {current_ext_id} -> {source_user['external_id']}")
+            else:
+                logger.debug(f"External ID for user {email} is already set to {current_ext_id}")
+        
         # Combine all updates and changes
         updates = {**name_updates, **group_updates, **role_updates}
         changes = name_changes + group_changes + role_changes
@@ -331,6 +344,11 @@ class UserSynchronizer:
             if source_user.get('real_email'):
                 logger.info(f"Setting additional email for new user {email}: {source_user['real_email']}")
                 self.api.set_additional_email(response['user_id'], source_user['real_email'])
+                
+            # Set external_id if present
+            if source_user.get('external_id'):
+                logger.info(f"Setting external ID for new user {email}: {source_user['external_id']}")
+                self.api.update_user_setting(response['user_id'], 'external_id', source_user['external_id'])
         else:
             logger.info(f"[DRY RUN] Would create user: {email} in group '{group_name}'")
             
@@ -343,6 +361,9 @@ class UserSynchronizer:
                 
             if source_user.get('real_email'):
                 logger.info(f"[DRY RUN] Would set additional email for new user {email}: {source_user['real_email']}")
+                
+            if source_user.get('external_id'):
+                logger.info(f"[DRY RUN] Would set external ID for new user {email}: {source_user['external_id']}")
 
     def _get_deactivation_reason(self, email: str, source_users: Dict[str, Dict[str, Any]]) -> Optional[str]:
         """Determine if a user should be deactivated and return the reason."""
@@ -392,6 +413,18 @@ class UserSynchronizer:
         current_additional_emails = {}
         if user_ids_to_check:
             current_additional_emails = self.api.get_additional_emails(user_ids_to_check)
+            
+        # Get all user IDs that need external_id check
+        user_ids_for_external_id = [
+            int(tc_user['user_id']) 
+            for email, tc_user in timecamp_users_map.items()
+            if source_users.get(email, {}).get('external_id')
+        ]
+        
+        # Get current external_id settings in batch
+        current_external_ids = {}
+        if user_ids_for_external_id:
+            current_external_ids = self._get_current_external_ids(user_ids_for_external_id)
         
         # Get current user roles
         current_roles = self.api.get_user_roles()
@@ -403,7 +436,8 @@ class UserSynchronizer:
                 if email in timecamp_users_map:
                     self._process_existing_user(
                         email, source_user, timecamp_users_map[email], 
-                        group_info, current_additional_emails, current_roles, dry_run
+                        group_info, current_additional_emails, current_external_ids,
+                        current_roles, dry_run
                     )
                 else:
                     self._process_new_user(email, source_user, group_info, dry_run)
@@ -496,6 +530,10 @@ class UserSynchronizer:
         except Exception as e:
             logger.error(f"Error during synchronization: {str(e)}")
             raise
+
+    def _get_current_external_ids(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, Optional[str]]:
+        """Get external_id settings for multiple users in bulk."""
+        return self.api.get_user_settings(user_ids, 'external_id', batch_size)
 
 def setup_synchronization(debug: bool = False) -> Tuple[UserSynchronizer, str]:
     """Set up the synchronization environment and return the synchronizer and users file path."""

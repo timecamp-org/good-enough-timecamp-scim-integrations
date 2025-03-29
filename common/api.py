@@ -111,67 +111,13 @@ class TimeCampAPI:
 
     def get_additional_emails(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, Optional[str]]:
         """Get additional email settings for multiple users in bulk."""
-        result = {}
-        for i in range(0, len(user_ids), batch_size):
-            batch = user_ids[i:i + batch_size]
-            response = self._make_request('GET', f"user/{','.join(map(str, batch))}/setting", 
-                                        params={"name[]": "additional_email"})
-            settings = response.json()
-            
-            # Handle both possible API response formats
-            if isinstance(settings, dict):
-                # New API format where settings is a dict with user_id keys
-                for user_id in batch:
-                    user_settings = settings.get(str(user_id), [])
-                    if isinstance(user_settings, list):
-                        additional_email = next(
-                            (s.get('value') for s in user_settings 
-                             if s.get('name') == 'additional_email'),
-                            None
-                        )
-                        result[user_id] = additional_email
-                    else:
-                        result[user_id] = None
-            else:
-                # Old API format where settings is a list
-                for user_id in batch:
-                    user_settings = [s for s in settings 
-                                   if str(s.get('userId', '')) == str(user_id) 
-                                   and s.get('name') == 'additional_email']
-                    result[user_id] = user_settings[0].get('value') if user_settings else None
-        
-        return result
+        return self.get_user_settings(user_ids, 'additional_email', batch_size)
 
     def are_users_enabled(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, bool]:
         """Check if multiple users are enabled in bulk."""
-        result = {}
-        for i in range(0, len(user_ids), batch_size):
-            batch = user_ids[i:i + batch_size]
-            response = self._make_request('GET', f"user/{','.join(map(str, batch))}/setting", 
-                                        params={"name[]": "disabled_user"})
-            settings = response.json()
-            
-            # Handle both possible API response formats
-            if isinstance(settings, dict):
-                # New API format where settings is a dict with user_id keys
-                for user_id in batch:
-                    user_settings = settings.get(str(user_id), [])
-                    if isinstance(user_settings, list):
-                        disabled = any(s.get('name') == 'disabled_user' and str(s.get('value')) == '1' 
-                                     for s in user_settings)
-                        result[user_id] = not disabled
-                    else:
-                        # If no settings or invalid format, assume user is enabled
-                        result[user_id] = True
-            else:
-                # Old API format where settings is a list
-                for user_id in batch:
-                    user_settings = [s for s in settings 
-                                   if str(s.get('userId', '')) == str(user_id) 
-                                   and s.get('name') == 'disabled_user']
-                    result[user_id] = not (user_settings and str(user_settings[0].get('value', '0')) == '1')
-        
-        return result 
+        results = self.get_user_settings(user_ids, 'disabled_user', batch_size)
+        # Convert 'disabled_user' values to boolean 'is_enabled' values
+        return {user_id: not (str(value) == '1') for user_id, value in results.items()}
 
     def get_user_roles(self) -> Dict[str, List[Dict[str, str]]]:
         """
@@ -207,4 +153,37 @@ class TimeCampAPI:
                 # Empty users list or alternative format
                 pass
         
-        return user_roles 
+        return user_roles
+
+    def get_user_settings(self, user_ids: List[int], setting_name: str, batch_size: int = 50) -> Dict[int, Optional[str]]:
+        """Get specific user settings for multiple users in bulk."""
+        result = {}
+        for i in range(0, len(user_ids), batch_size):
+            batch = user_ids[i:i + batch_size]
+            response = self._make_request('GET', f"user/{','.join(map(str, batch))}/setting", 
+                                        params={"name[]": setting_name})
+            settings = response.json()
+            
+            # Handle both possible API response formats
+            if isinstance(settings, dict):
+                # New API format where settings is a dict with user_id keys
+                for user_id in batch:
+                    user_settings = settings.get(str(user_id), [])
+                    if isinstance(user_settings, list):
+                        setting_value = next(
+                            (s.get('value') for s in user_settings 
+                             if s.get('name') == setting_name),
+                            None
+                        )
+                        result[user_id] = setting_value
+                    else:
+                        result[user_id] = None
+            else:
+                # Old API format where settings is a list
+                for user_id in batch:
+                    user_settings = [s for s in settings 
+                                   if str(s.get('userId', '')) == str(user_id) 
+                                   and s.get('name') == setting_name]
+                    result[user_id] = user_settings[0].get('value') if user_settings else None
+        
+        return result 

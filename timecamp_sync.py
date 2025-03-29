@@ -190,6 +190,33 @@ class UserSynchronizer:
         
         return needs_group_update, updates, changes
 
+    def _check_user_role_update(self, user_id: str, tc_user: Dict[str, Any], 
+                               current_roles: Dict[str, List[Dict[str, str]]],
+                               desired_role_id: str) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Check if user's role needs to be updated."""
+        updates, changes = {}, []
+        needs_role_update = False
+        
+        # Get current role assignments for this user
+        user_roles = current_roles.get(user_id, [])
+        
+        # Check if user has the desired role in their current group
+        current_role_id = None
+        for role_assignment in user_roles:
+            if str(role_assignment.get('group_id')) == str(tc_user.get('group_id')):
+                current_role_id = role_assignment.get('role_id')
+                break
+        
+        if current_role_id != desired_role_id:
+            needs_role_update = True
+            updates['isManager'] = desired_role_id == '2'  # Role ID 2 is Supervisor/Manager
+            role_names = {'1': 'Administrator', '2': 'Supervisor', '3': 'User', '5': 'Guest'}
+            current_role_name = role_names.get(current_role_id, f"Unknown role ({current_role_id})")
+            desired_role_name = role_names.get(desired_role_id, f"Unknown role ({desired_role_id})")
+            changes.append(f"role from '{current_role_name}' to '{desired_role_name}'")
+            
+        return needs_role_update, updates, changes
+
     def _check_user_name_update(self, source_user: Dict[str, Any], tc_user: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         """Check if user's name needs to be updated."""
         updates, changes = {}, []
@@ -213,6 +240,7 @@ class UserSynchronizer:
     def _process_existing_user(self, email: str, source_user: Dict[str, Any], tc_user: Dict[str, Any], 
                              group_info: Optional[Dict[str, Any]], 
                              current_additional_emails: Dict[int, Optional[str]],
+                             current_roles: Dict[str, List[Dict[str, str]]],
                              dry_run: bool = False) -> None:
         """Process an existing user and update their information if needed."""
         if int(tc_user['user_id']) in self.config.ignored_user_ids:
@@ -236,6 +264,17 @@ class UserSynchronizer:
         # Check if group needs to be updated
         _, group_updates, group_changes = self._check_user_group_update(source_user, tc_user, group_info)
         
+        # Check if role needs to be updated
+        # Default role_id is 3 (User) unless specified otherwise in source_user
+        desired_role_id = source_user.get('role_id', '3')
+        role_updates, role_changes = {}, []
+        
+        # Only check role if we have user_id as a string
+        if 'user_id' in tc_user:
+            _, role_updates, role_changes = self._check_user_role_update(
+                tc_user['user_id'], tc_user, current_roles, desired_role_id
+            )
+        
         # Handle real_email if present
         if source_user.get('real_email'):
             current_email = current_additional_emails.get(int(tc_user['user_id']))
@@ -249,8 +288,8 @@ class UserSynchronizer:
                 logger.debug(f"Additional email for user {email} is already set to {current_email}")
         
         # Combine all updates and changes
-        updates = {**name_updates, **group_updates}
-        changes = name_changes + group_changes
+        updates = {**name_updates, **group_updates, **role_updates}
+        changes = name_changes + group_changes + role_changes
 
         # Apply updates if needed
         if updates and not dry_run:
@@ -277,12 +316,31 @@ class UserSynchronizer:
             logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{group_name}'")
             response = self.api.add_user(email, source_user['name'], target_group_id)
             
+            # Set role if specified (default is User/3)
+            desired_role_id = source_user.get('role_id', '3')
+            if desired_role_id != '3':  # Only update if not default User role
+                role_names = {'1': 'Administrator', '2': 'Supervisor', '3': 'User', '5': 'Guest'}
+                role_name = role_names.get(desired_role_id, f"role ID {desired_role_id}")
+                logger.info(f"Setting role for new user {email} to {role_name}")
+                
+                # Update role using isManager flag (TimeCamp API does this when role_id = 2)
+                is_manager = desired_role_id == '2'
+                self.api.update_user(response['user_id'], {'isManager': is_manager}, target_group_id)
+            
             # Set additional email if present
             if source_user.get('real_email'):
                 logger.info(f"Setting additional email for new user {email}: {source_user['real_email']}")
                 self.api.set_additional_email(response['user_id'], source_user['real_email'])
         else:
             logger.info(f"[DRY RUN] Would create user: {email} in group '{group_name}'")
+            
+            # Log role assignment in dry run mode
+            desired_role_id = source_user.get('role_id', '3')
+            if desired_role_id != '3':
+                role_names = {'1': 'Administrator', '2': 'Supervisor', '3': 'User', '5': 'Guest'}
+                role_name = role_names.get(desired_role_id, f"role ID {desired_role_id}")
+                logger.info(f"[DRY RUN] Would set role for new user {email} to {role_name}")
+                
             if source_user.get('real_email'):
                 logger.info(f"[DRY RUN] Would set additional email for new user {email}: {source_user['real_email']}")
 
@@ -335,6 +393,9 @@ class UserSynchronizer:
         if user_ids_to_check:
             current_additional_emails = self.api.get_additional_emails(user_ids_to_check)
         
+        # Get current user roles
+        current_roles = self.api.get_user_roles()
+        
         for email, source_user in source_users.items():
             try:
                 group_info = group_structure.get(source_user.get('department'))
@@ -342,7 +403,7 @@ class UserSynchronizer:
                 if email in timecamp_users_map:
                     self._process_existing_user(
                         email, source_user, timecamp_users_map[email], 
-                        group_info, current_additional_emails, dry_run
+                        group_info, current_additional_emails, current_roles, dry_run
                     )
                 else:
                     self._process_new_user(email, source_user, group_info, dry_run)

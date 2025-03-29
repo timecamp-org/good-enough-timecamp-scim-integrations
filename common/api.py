@@ -172,3 +172,39 @@ class TimeCampAPI:
                     result[user_id] = not (user_settings and str(user_settings[0].get('value', '0')) == '1')
         
         return result 
+
+    def get_user_roles(self) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Get roles for all users across all groups.
+        
+        Returns:
+            Dict mapping user_id to list of group assignments with their role_ids
+            Example: {
+                "1234": [{"group_id": "5678", "role_id": "2"}]
+            }
+        """
+        response = self._make_request('GET', "people_picker")
+        data = response.json()
+        
+        user_roles = {}
+        
+        # Process groups and their users
+        for group_key, group_data in data.get('groups', {}).items():
+            group_id = group_data.get('group_id')
+            users = group_data.get('users', {})
+            
+            # Handle different format of users (dict vs list)
+            if isinstance(users, dict):
+                for user_id, user_data in users.items():
+                    if user_id not in user_roles:
+                        user_roles[user_id] = []
+                    
+                    user_roles[user_id].append({
+                        'group_id': group_id,
+                        'role_id': user_data.get('role_id')
+                    })
+            elif isinstance(users, list):
+                # Empty users list or alternative format
+                pass
+        
+        return user_roles 

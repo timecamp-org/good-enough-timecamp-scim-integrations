@@ -96,7 +96,13 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
         is_a_supervisor = user_id in supervisor_ids
         has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
         
-        # Set isManager flag based on having subordinates
+        # Set role_id based on having subordinates (2 = Supervisor, 3 = User)
+        if user_id in users_with_subordinates:
+            user['role_id'] = '2'  # Supervisor role
+        else:
+            user['role_id'] = '3'  # Regular user role
+        
+        # Keep isManager flag for backward compatibility
         user['isManager'] = user_id in users_with_subordinates
         
         if is_a_supervisor:

@@ -80,6 +80,13 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
     """Assign departments based on supervisor hierarchy."""
     department_paths = set()
     
+    # First pass: identify users with subordinates
+    users_with_subordinates = set()
+    for user in source_data['users']:
+        supervisor_id = user.get('supervisor_id')
+        if supervisor_id and supervisor_id.strip():
+            users_with_subordinates.add(supervisor_id)
+    
     for user in source_data['users']:
         user_id = user.get('external_id')
         if not user_id:
@@ -88,6 +95,9 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
         # Check if user is a supervisor
         is_a_supervisor = user_id in supervisor_ids
         has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
+        
+        # Set isManager flag based on having subordinates
+        user['isManager'] = user_id in users_with_subordinates
         
         if is_a_supervisor:
             # User is a supervisor - assign to their path in the hierarchy

@@ -181,6 +181,7 @@ Notes:
 - Group name with whitespaces near / ✅
 - Setting enabled to add external_id to user name ✅
 - Don't send automatic email when user is created ✅
+- Setting and updating real user email as second email setting in TimeCamp ✅
 - Creating TimeCamp groups based on supervisor ✅
    - User A (no supervisor) → Group A
    - User B (supervisor: A) → Group "A/B"

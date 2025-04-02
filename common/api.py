@@ -1,8 +1,12 @@
 import time
 import requests
+import warnings
 from typing import Dict, List, Any, Optional
 from common.logger import setup_logger
 from common.utils import TimeCampConfig
+
+# Suppress SSL verification warnings
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 logger = setup_logger('timecamp_sync')
 
@@ -24,7 +28,7 @@ class TimeCampAPI:
         
         for attempt in range(max_retries):
             try:
-                response = requests.request(method, url, headers=self.headers, **kwargs)
+                response = requests.request(method, url, headers=self.headers, verify=False, **kwargs)
                 logger.debug(f"Response status: {response.status_code}")
                 # logger.debug(f"Response headers: {dict(response.headers)}")
                 # logger.debug(f"Response content: {response.text[:1000]}")  # First 1000 chars to avoid huge logs

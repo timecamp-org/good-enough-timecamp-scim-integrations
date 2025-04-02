@@ -278,15 +278,19 @@ class UserSynchronizer:
         
         # Handle real_email if present
         if source_user.get('real_email'):
-            current_email = current_additional_emails.get(int(tc_user['user_id']))
-            if current_email != source_user['real_email']:
-                if not dry_run:
-                    logger.info(f"Updating additional email for user {email}: {current_email} -> {source_user['real_email']}")
-                    self.api.set_additional_email(tc_user['user_id'], source_user['real_email'])
-                else:
-                    logger.info(f"[DRY RUN] Would update additional email for user {email}: {current_email} -> {source_user['real_email']}")
+            # Skip if real_email is the same as primary email
+            if source_user['real_email'].lower() == email.lower():
+                logger.debug(f"Skipping additional email for user {email}: additional email is the same as primary email")
             else:
-                logger.debug(f"Additional email for user {email} is already set to {current_email}")
+                current_email = current_additional_emails.get(int(tc_user['user_id']))
+                if current_email != source_user['real_email']:
+                    if not dry_run:
+                        logger.info(f"Updating additional email for user {email}: {current_email} -> {source_user['real_email']}")
+                        self.api.set_additional_email(tc_user['user_id'], source_user['real_email'])
+                    else:
+                        logger.info(f"[DRY RUN] Would update additional email for user {email}: {current_email} -> {source_user['real_email']}")
+                else:
+                    logger.debug(f"Additional email for user {email} is already set to {current_email}")
         
         # Handle external_id if present
         if source_user.get('external_id'):
@@ -340,10 +344,12 @@ class UserSynchronizer:
                 is_manager = desired_role_id == '2'
                 self.api.update_user(response['user_id'], {'isManager': is_manager}, target_group_id)
             
-            # Set additional email if present
-            if source_user.get('real_email'):
+            # Set additional email if present and different from primary email
+            if source_user.get('real_email') and source_user['real_email'].lower() != email.lower():
                 logger.info(f"Setting additional email for new user {email}: {source_user['real_email']}")
                 self.api.set_additional_email(response['user_id'], source_user['real_email'])
+            elif source_user.get('real_email'):
+                logger.debug(f"Skipping additional email for new user {email}: additional email is the same as primary email")
                 
             # Set external_id if present
             if source_user.get('external_id'):
@@ -359,8 +365,10 @@ class UserSynchronizer:
                 role_name = role_names.get(desired_role_id, f"role ID {desired_role_id}")
                 logger.info(f"[DRY RUN] Would set role for new user {email} to {role_name}")
                 
-            if source_user.get('real_email'):
+            if source_user.get('real_email') and source_user['real_email'].lower() != email.lower():
                 logger.info(f"[DRY RUN] Would set additional email for new user {email}: {source_user['real_email']}")
+            elif source_user.get('real_email'):
+                logger.debug(f"[DRY RUN] Would skip additional email for new user {email}: additional email is the same as primary email")
                 
             if source_user.get('external_id'):
                 logger.info(f"[DRY RUN] Would set external ID for new user {email}: {source_user['external_id']}")

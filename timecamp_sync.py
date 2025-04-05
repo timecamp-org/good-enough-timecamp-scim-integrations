@@ -448,7 +448,10 @@ class UserSynchronizer:
                         current_roles, dry_run
                     )
                 else:
-                    self._process_new_user(email, source_user, group_info, dry_run)
+                    if not self.config.disable_new_users:
+                        self._process_new_user(email, source_user, group_info, dry_run)
+                    else:
+                        logger.info(f"Skipping creation of new user {email} (disable_new_users is enabled)")
             except Exception as e:
                 logger.error(f"Error processing user {email}: {str(e)}")
 
@@ -553,6 +556,7 @@ def setup_synchronization(debug: bool = False) -> Tuple[UserSynchronizer, str]:
     config = TimeCampConfig.from_env()
     logger.debug(f"Using API key: {config.api_key[:4]}...{config.api_key[-4:]}")
     logger.debug(f"Using supervisor-based groups: {config.use_supervisor_groups}")
+    logger.debug(f"Disable new users creation: {config.disable_new_users}")
     
     # Initialize API and synchronizer
     timecamp = TimeCampAPI(config)

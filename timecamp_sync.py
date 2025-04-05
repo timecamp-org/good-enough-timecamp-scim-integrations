@@ -410,29 +410,18 @@ class UserSynchronizer:
                      group_structure: Dict[str, Dict[str, Any]],
                      dry_run: bool = False) -> None:
         """Process all users from source data, updating existing users and creating new ones."""
-        # Get all user IDs that need additional email check
-        user_ids_to_check = [
-            int(tc_user['user_id']) 
-            for email, tc_user in timecamp_users_map.items()
-            if source_users.get(email, {}).get('real_email')
-        ]
+        # Get all user IDs for additional email and external ID check
+        all_timecamp_user_ids = [int(tc_user['user_id']) for _, tc_user in timecamp_users_map.items()]
         
-        # Get current additional email settings in batch
+        # Get current additional email settings for all users in batch
         current_additional_emails = {}
-        if user_ids_to_check:
-            current_additional_emails = self.api.get_additional_emails(user_ids_to_check)
+        if all_timecamp_user_ids:
+            current_additional_emails = self.api.get_additional_emails(all_timecamp_user_ids)
             
-        # Get all user IDs that need external_id check
-        user_ids_for_external_id = [
-            int(tc_user['user_id']) 
-            for email, tc_user in timecamp_users_map.items()
-            if source_users.get(email, {}).get('external_id')
-        ]
-        
-        # Get current external_id settings in batch
+        # Get current external_id settings for all users in batch
         current_external_ids = {}
-        if user_ids_for_external_id:
-            current_external_ids = self._get_current_external_ids(user_ids_for_external_id)
+        if all_timecamp_user_ids:
+            current_external_ids = self._get_current_external_ids(all_timecamp_user_ids)
         
         # Get current user roles
         current_roles = self.api.get_user_roles()

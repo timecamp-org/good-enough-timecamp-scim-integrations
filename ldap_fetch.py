@@ -50,7 +50,8 @@ def get_ldap_config():
         'filter': os.getenv('LDAP_FILTER', '(&(objectClass=person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'),
         'page_size': int(os.getenv('LDAP_PAGE_SIZE', '1000')),
         'use_samaccountname': os.getenv('LDAP_USE_SAMACCOUNTNAME', 'false').lower() == 'true',
-        'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true'
+        'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true',
+        'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true'
     }
     
     # Validate required configuration
@@ -283,7 +284,81 @@ def search_ldap_users(ldap_connection, config):
                 logger.warning("Size limit exceeded. Consider reducing LDAP_PAGE_SIZE in .env")
             raise
     
-    return users
+    return users, manager_guid_cache
+
+def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache):
+    """Fetch supervisors that are referenced but not downloaded in the initial search."""
+    if not config['use_supervisor_groups']:
+        return []
+
+    logger.info("Checking for missing supervisors...")
+
+    # Collect all supervisor IDs that are referenced
+    referenced_supervisor_ids = {user.get('supervisor_id') for user in users if user.get('supervisor_id')}
+    
+    # Identify which supervisor IDs are not in our fetched users
+    existing_ids = {user.get('external_id') for user in users}
+    missing_supervisor_ids = {sid for sid in referenced_supervisor_ids if sid and sid not in existing_ids}
+    
+    if not missing_supervisor_ids:
+        logger.info("No missing supervisors found.")
+        return []
+
+    logger.info(f"Found {len(missing_supervisor_ids)} missing supervisors. Fetching them...")
+    
+    # Invert the manager_guid_cache to get DN from GUID
+    manager_dn_by_guid = {}
+    for dn, guid in manager_guid_cache.items():
+        if guid in missing_supervisor_ids:
+            manager_dn_by_guid[guid] = dn
+    
+    missing_supervisors = []
+    
+    # Fetch each missing supervisor individually
+    for supervisor_id in missing_supervisor_ids:
+        if supervisor_id in manager_dn_by_guid:
+            dn = manager_dn_by_guid[supervisor_id]
+            try:
+                # Use a broader filter to find the supervisor even if they're disabled
+                supervisor_result = ldap_connection.search_s(
+                    dn,
+                    ldap.SCOPE_BASE,
+                    '(objectClass=*)',
+                    [
+                        'objectGUID', 'sAMAccountName', 'mail', 'displayName', 
+                        'department', 'title', 'givenName', 'sn', 'mobile',
+                        'telephoneNumber', 'streetAddress', 'postalCode', 'manager',
+                        'userAccountControl'
+                    ]
+                )
+                
+                if supervisor_result and len(supervisor_result) > 0 and len(supervisor_result[0]) > 1:
+                    supervisor_dn, supervisor_attrs = supervisor_result[0]
+                    processed_attrs = process_attributes(supervisor_attrs)
+                    
+                    if processed_attrs:
+                        # Check if the supervisor has their own manager
+                        manager_id = ""
+                        if processed_attrs.get('manager'):
+                            manager_id = get_manager_guid(ldap_connection, processed_attrs['manager'], manager_guid_cache)
+                        
+                        # Determine department
+                        department = get_department_value(processed_attrs, supervisor_dn, config['use_ou_structure'])
+                        
+                        # Create supervisor object
+                        supervisor = create_user_object(processed_attrs, manager_id, department, config)
+                        
+                        # Mark as inactive if it was filtered out in the main search
+                        # This likely means they have a userAccountControl value indicating they're disabled
+                        supervisor["status"] = "inactive"
+                        
+                        missing_supervisors.append(supervisor)
+                        logger.info(f"Added missing supervisor: {supervisor.get('name')} ({supervisor.get('email')})")
+            except Exception as e:
+                logger.warning(f"Error fetching supervisor with ID {supervisor_id}: {str(e)}")
+    
+    logger.info(f"Successfully fetched {len(missing_supervisors)} missing supervisors.")
+    return missing_supervisors
 
 def save_users_to_file(users):
     """Save users to JSON file."""
@@ -304,9 +379,19 @@ def fetch_ldap_users():
         
         try:
             # Search for users
-            users = search_ldap_users(ldap_connection, config)
+            users, manager_guid_cache = search_ldap_users(ldap_connection, config)
             
-            logger.info(f"Total users fetched: {len(users)}")
+            logger.info(f"Initial users fetched: {len(users)}")
+            
+            # Fetch missing supervisors if supervisor groups are enabled
+            if config['use_supervisor_groups']:
+                missing_supervisors = fetch_missing_supervisors(
+                    ldap_connection, config, users, manager_guid_cache
+                )
+                
+                # Add missing supervisors to users list
+                users.extend(missing_supervisors)
+                logger.info(f"Total users including missing supervisors: {len(users)}")
             
             # Save users to file
             save_users_to_file(users)

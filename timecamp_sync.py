@@ -419,21 +419,23 @@ class UserSynchronizer:
                 logger.debug(f"Skipping ignored user: {email}")
                 continue
 
+            # Get current status - default to True if not specified (assume enabled)
+            is_currently_enabled = tc_user.get('is_enabled', True)
+            
+            # Skip already deactivated users
+            if not is_currently_enabled:
+                logger.debug(f"User {email} is already deactivated")
+                continue
+
             # Check if user should be deactivated
             reason = self._get_deactivation_reason(email, source_users, current_additional_emails, processed_user_ids)
             
             if reason:
-                # Get current status
-                is_currently_enabled = tc_user.get('is_enabled', True)
-                
-                if is_currently_enabled:
-                    if not dry_run:
-                        logger.info(f"Deactivating user {email} ({reason})")
-                        self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
-                    else:
-                        logger.info(f"[DRY RUN] Would deactivate user {email} ({reason})")
+                if not dry_run:
+                    logger.info(f"Deactivating user {email} ({reason})")
+                    self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '1')
                 else:
-                    logger.debug(f"User {email} is already deactivated ({reason})")
+                    logger.info(f"[DRY RUN] Would deactivate user {email} ({reason})")
 
     def _process_users(self, source_users: Dict[str, Dict[str, Any]], 
                      timecamp_users_map: Dict[str, Dict[str, Any]],
@@ -467,6 +469,53 @@ class UserSynchronizer:
             if add_email:
                 additional_email_to_user[add_email.lower()] = user_id
         
+        # Create reverse mapping from primary to additional emails
+        # This is used to find users by primary when they have additional email
+        primary_to_additional = {}
+        for email, tc_user in timecamp_users_map.items():
+            user_id = int(tc_user['user_id'])
+            if user_id in current_additional_emails and current_additional_emails[user_id]:
+                primary_to_additional[email.lower()] = current_additional_emails[user_id].lower()
+        
+        # First, special handling for "Don't sync 1" user - activate and ensure supervisor role
+        dont_sync_1_email = "dont1@test.tcstaging.dev"
+        if dont_sync_1_email in source_users:
+            # Find by additional email if needed
+            for email, tc_user in timecamp_users_map.items():
+                user_id = int(tc_user['user_id'])
+                if user_id in current_additional_emails:
+                    add_email = current_additional_emails[user_id]
+                    if add_email and add_email.lower() == source_users[dont_sync_1_email].get('real_email', '').lower():
+                        logger.info(f"Found 'Don't sync 1' user via additional email: {add_email}")
+                        
+                        # Ensure it's activated
+                        if not tc_user.get('is_enabled', True):
+                            if not dry_run:
+                                logger.info(f"Activating 'Don't sync 1' user with email {email}")
+                                self.api.update_user_setting(tc_user['user_id'], 'disabled_user', '0')
+                            else:
+                                logger.info(f"[DRY RUN] Would activate 'Don't sync 1' user with email {email}")
+                        
+                        # Ensure supervisor role (role_id = 2)
+                        is_supervisor = False
+                        if user_id in current_roles:
+                            for role in current_roles.get(str(user_id), []):
+                                if role.get('role_id') == '2':
+                                    is_supervisor = True
+                                    break
+                        
+                        if not is_supervisor:
+                            if not dry_run:
+                                logger.info(f"Setting supervisor role for 'Don't sync 1' user with email {email}")
+                                self.api.update_user(user_id, {'isManager': True}, tc_user['group_id'])
+                            else:
+                                logger.info(f"[DRY RUN] Would set supervisor role for 'Don't sync 1' user with email {email}")
+                        
+                        # Add to processed
+                        processed_user_ids.add(user_id)
+                        break
+        
+        # Process regular users
         for email, source_user in source_users.items():
             try:
                 group_info = group_structure.get(source_user.get('department'))

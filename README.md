@@ -184,6 +184,7 @@ Notes:
 - Setting and updating real user email as second email setting in TimeCamp ✅
 - Update user roles based on supervisor ✅
 - Update user external id ✅
+- Matching users based on TC email or TC additional email ✅
 - Creating TimeCamp groups based on supervisor ✅
    - User A (no supervisor) → Group A
    - User B (supervisor: A) → Group "A/B"

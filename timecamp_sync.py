@@ -373,24 +373,54 @@ class UserSynchronizer:
             if source_user.get('external_id'):
                 logger.info(f"[DRY RUN] Would set external ID for new user {email}: {source_user['external_id']}")
 
-    def _get_deactivation_reason(self, email: str, source_users: Dict[str, Dict[str, Any]]) -> Optional[str]:
-        """Determine if a user should be deactivated and return the reason."""
-        if email not in source_users:
-            return "not present in source"
-        elif source_users[email].get('status', '').lower() != 'active':
-            return f"status is {source_users[email].get('status', 'unknown')}"
-        return None
+    def _get_deactivation_reason(self, email: str, source_users: Dict[str, Dict[str, Any]], 
+                               current_additional_emails: Dict[int, Optional[str]],
+                               processed_user_ids: Set[int]) -> Optional[str]:
+        """Determine if a user should be deactivated and return the reason.
+        
+        Takes into account users that were matched by their additional email.
+        """
+        # If this user was already processed (matched by additional email), don't deactivate
+        if int(self.timecamp_users_map[email]['user_id']) in processed_user_ids:
+            return None
+            
+        # Check if primary email matches
+        if email in source_users:
+            # Check status only if matched by primary email
+            if source_users[email].get('status', '').lower() != 'active':
+                return f"status is {source_users[email].get('status', 'unknown')}"
+            return None
+            
+        # Check for match by additional email
+        user_id = int(self.timecamp_users_map[email]['user_id'])
+        additional_email = current_additional_emails.get(user_id)
+        
+        if additional_email and additional_email.lower() in source_users:
+            # User is matched by additional email, so don't deactivate
+            logger.debug(f"User {email} matched by additional email {additional_email}")
+            # Add to processed to avoid redundant processing
+            processed_user_ids.add(user_id)
+            return None
+            
+        # Not found in source by either primary or additional email
+        return "not present in source"
 
     def _process_deactivations(self, timecamp_users: Dict[str, Dict[str, Any]], 
-                             source_users: Dict[str, Dict[str, Any]], dry_run: bool = False) -> None:
+                             source_users: Dict[str, Dict[str, Any]],
+                             current_additional_emails: Dict[int, Optional[str]],
+                             processed_user_ids: Set[int],
+                             dry_run: bool = False) -> None:
         """Process user deactivations for users not in source or marked inactive."""
+        # Save reference to timecamp_users for use in _get_deactivation_reason
+        self.timecamp_users_map = timecamp_users
+        
         for email, tc_user in timecamp_users.items():
             if int(tc_user['user_id']) in self.config.ignored_user_ids:
                 logger.debug(f"Skipping ignored user: {email}")
                 continue
 
             # Check if user should be deactivated
-            reason = self._get_deactivation_reason(email, source_users)
+            reason = self._get_deactivation_reason(email, source_users, current_additional_emails, processed_user_ids)
             
             if reason:
                 # Get current status
@@ -408,7 +438,8 @@ class UserSynchronizer:
     def _process_users(self, source_users: Dict[str, Dict[str, Any]], 
                      timecamp_users_map: Dict[str, Dict[str, Any]],
                      group_structure: Dict[str, Dict[str, Any]],
-                     dry_run: bool = False) -> None:
+                     dry_run: bool = False,
+                     processed_user_ids: Optional[Set[int]] = None) -> None:
         """Process all users from source data, updating existing users and creating new ones."""
         # Get all user IDs for additional email and external ID check
         all_timecamp_user_ids = [int(tc_user['user_id']) for _, tc_user in timecamp_users_map.items()]
@@ -426,16 +457,55 @@ class UserSynchronizer:
         # Get current user roles
         current_roles = self.api.get_user_roles()
         
+        # Initialize or use provided set to track processed users
+        if processed_user_ids is None:
+            processed_user_ids = set()
+        
+        # Create reverse mapping from additional emails to user IDs
+        additional_email_to_user = {}
+        for user_id, add_email in current_additional_emails.items():
+            if add_email:
+                additional_email_to_user[add_email.lower()] = user_id
+        
         for email, source_user in source_users.items():
             try:
                 group_info = group_structure.get(source_user.get('department'))
                 
+                # Check for match by primary email
                 if email in timecamp_users_map:
+                    tc_user = timecamp_users_map[email]
+                    user_id = int(tc_user['user_id'])
+                    
+                    # Skip if we've already processed this user
+                    if user_id in processed_user_ids:
+                        logger.debug(f"Skipping duplicate user {email} (ID: {user_id})")
+                        continue
+                    
+                    processed_user_ids.add(user_id)
                     self._process_existing_user(
-                        email, source_user, timecamp_users_map[email], 
+                        email, source_user, tc_user, 
                         group_info, current_additional_emails, current_external_ids,
                         current_roles, dry_run
                     )
+                # Check for match by additional email
+                elif email.lower() in additional_email_to_user:
+                    user_id = additional_email_to_user[email.lower()]
+                    
+                    # Find the user in timecamp_users_map by user_id
+                    tc_user = None
+                    for tc_email, user in timecamp_users_map.items():
+                        if int(user['user_id']) == user_id:
+                            tc_user = user
+                            break
+                    
+                    if tc_user and user_id not in processed_user_ids:
+                        processed_user_ids.add(user_id)
+                        logger.debug(f"Found user {email} by matching additional email to TimeCamp user with primary email {tc_user['email']}")
+                        self._process_existing_user(
+                            tc_user['email'], source_user, tc_user,
+                            group_info, current_additional_emails, current_external_ids,
+                            current_roles, dry_run
+                        )
                 else:
                     if not self.config.disable_new_users:
                         self._process_new_user(email, source_user, group_info, dry_run)
@@ -479,6 +549,14 @@ class UserSynchronizer:
         """Prepare TimeCamp users by cleaning names and mapping group paths."""
         result = {}
         
+        # Get all user IDs for additional email check
+        all_timecamp_user_ids = [int(user['user_id']) for user in timecamp_users]
+        
+        # Get current additional email settings for all users in batch
+        additional_emails = {}
+        if all_timecamp_user_ids:
+            additional_emails = self.api.get_additional_emails(all_timecamp_user_ids)
+        
         for user in timecamp_users:
             # Clean the display name
             user['display_name'] = clean_name(user['display_name'])
@@ -494,6 +572,13 @@ class UserSynchronizer:
             if 'email' in user:
                 user['email'] = user['email'].lower()
                 result[user['email']] = user
+                
+                # Also add the user to the result map using their additional email if it exists
+                user_id = int(user['user_id'])
+                if user_id in additional_emails and additional_emails[user_id]:
+                    additional_email = additional_emails[user_id].lower()
+                    if additional_email and additional_email != user['email']:
+                        result[additional_email] = user
                 
         return result
 
@@ -520,11 +605,22 @@ class UserSynchronizer:
             # Step 4: Prepare TimeCamp users
             timecamp_users_map = self._prepare_timecamp_users(timecamp_users, current_paths, root_group_name)
             
+            # Get all user IDs
+            all_timecamp_user_ids = [int(tc_user['user_id']) for _, tc_user in timecamp_users_map.items()]
+            
+            # Get additional emails for all users in batch
+            current_additional_emails = {}
+            if all_timecamp_user_ids:
+                current_additional_emails = self.api.get_additional_emails(all_timecamp_user_ids)
+                
+            # Initialize set to track processed users
+            processed_user_ids = set()
+            
             # Step 5: Process users (update existing and create new)
-            self._process_users(source_users, timecamp_users_map, group_structure, dry_run)
+            self._process_users(source_users, timecamp_users_map, group_structure, dry_run, processed_user_ids)
             
             # Step 6: Process deactivations
-            self._process_deactivations(timecamp_users_map, source_users, dry_run)
+            self._process_deactivations(timecamp_users_map, source_users, current_additional_emails, processed_user_ids, dry_run)
             
             logger.info("Synchronization completed successfully")
         except Exception as e:

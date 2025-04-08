@@ -588,10 +588,7 @@ class UserSynchronizer:
             # Step 1: Get source users and department paths
             source_users, department_paths = self._get_source_users(users_file)
             
-            # Step 2: Sync group structure
-            group_structure = self.group_sync.sync_structure(department_paths, dry_run)
-            
-            # Step 3: Get current TimeCamp users and groups
+            # Step 2: Get current TimeCamp users and groups first
             timecamp_users = self.api.get_users()
             current_groups = self.api.get_groups()
             current_paths = self.group_sync._build_group_paths(current_groups)
@@ -602,8 +599,26 @@ class UserSynchronizer:
                 None
             )
             
-            # Step 4: Prepare TimeCamp users
+            # Step 3: Prepare TimeCamp users
             timecamp_users_map = self._prepare_timecamp_users(timecamp_users, current_paths, root_group_name)
+            
+            # Step 4: Filter department paths if TIMECAMP_DISABLE_NEW_USERS is true
+            if self.config.disable_new_users:
+                logger.debug("TIMECAMP_DISABLE_NEW_USERS is true, filtering department paths for existing users only")
+                # Create a set of existing emails (primary and additional)
+                existing_emails = set(timecamp_users_map.keys())
+                
+                # Filter department paths to include only those needed for existing users
+                filtered_departments = set()
+                for email, user_data in source_users.items():
+                    if email.lower() in existing_emails and user_data.get('department'):
+                        filtered_departments.add(user_data['department'])
+                
+                logger.debug(f"Filtered from {len(department_paths)} to {len(filtered_departments)} department paths")
+                department_paths = filtered_departments
+            
+            # Step 5: Sync group structure (with possibly filtered paths)
+            group_structure = self.group_sync.sync_structure(department_paths, dry_run)
             
             # Get all user IDs
             all_timecamp_user_ids = [int(tc_user['user_id']) for _, tc_user in timecamp_users_map.items()]
@@ -616,10 +631,10 @@ class UserSynchronizer:
             # Initialize set to track processed users
             processed_user_ids = set()
             
-            # Step 5: Process users (update existing and create new)
+            # Step 6: Process users (update existing and create new)
             self._process_users(source_users, timecamp_users_map, group_structure, dry_run, processed_user_ids)
             
-            # Step 6: Process deactivations
+            # Step 7: Process deactivations
             self._process_deactivations(timecamp_users_map, source_users, current_additional_emails, processed_user_ids, dry_run)
             
             logger.info("Synchronization completed successfully")

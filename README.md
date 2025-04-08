@@ -168,6 +168,7 @@ Notes:
 - Remove empty groups
 - Change of email (use external_id to identify user)
 - Refactor deparments and use array instead of string
+- General refactoring for timecamp_sync
 
 ## Test Cases
 
@@ -185,6 +186,7 @@ Notes:
 - Update user roles based on supervisor ✅
 - Update user external id ✅
 - Matching users based on TC email or TC additional email ✅
+- If setting TIMECAMP_DISABLE_NEW_USERS=true create only groups that are needed for existing users, don't create all groups that could be potentialy created ✅
 - Creating TimeCamp groups based on supervisor ✅
    - User A (no supervisor) → Group A
    - User B (supervisor: A) → Group "A/B"

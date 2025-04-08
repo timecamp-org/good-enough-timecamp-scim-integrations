@@ -61,7 +61,6 @@ def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't a
         
     # Replace or remove special characters
     replacements = {
-        "'": "",
         "(": "",
         ")": "",
         "[": "",
@@ -72,8 +71,6 @@ def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't a
         "´": "",
         """: "",
         """: "",
-        "'": "",
-        "'": "",
         "_": "",
     }
     result = str(name)

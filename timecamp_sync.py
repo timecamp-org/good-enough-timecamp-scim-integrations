@@ -296,11 +296,14 @@ class UserSynchronizer:
         if source_user.get('external_id'):
             current_ext_id = current_external_ids.get(int(tc_user['user_id']))
             if current_ext_id != source_user['external_id']:
-                if not dry_run:
-                    logger.info(f"Updating external ID for user {email}: {current_ext_id} -> {source_user['external_id']}")
-                    self.api.update_user_setting(tc_user['user_id'], 'external_id', source_user['external_id'])
+                if not self.config.disable_external_id_sync:
+                    if not dry_run:
+                        logger.info(f"Updating external ID for user {email}: {current_ext_id} -> {source_user['external_id']}")
+                        self.api.update_user_setting(tc_user['user_id'], 'external_id', source_user['external_id'])
+                    else:
+                        logger.info(f"[DRY RUN] Would update external ID for user {email}: {current_ext_id} -> {source_user['external_id']}")
                 else:
-                    logger.info(f"[DRY RUN] Would update external ID for user {email}: {current_ext_id} -> {source_user['external_id']}")
+                    logger.debug(f"Skipping external ID update for user {email} (disable_external_id_sync is enabled)")
             else:
                 logger.debug(f"External ID for user {email} is already set to {current_ext_id}")
         
@@ -353,8 +356,11 @@ class UserSynchronizer:
                 
             # Set external_id if present
             if source_user.get('external_id'):
-                logger.info(f"Setting external ID for new user {email}: {source_user['external_id']}")
-                self.api.update_user_setting(response['user_id'], 'external_id', source_user['external_id'])
+                if not self.config.disable_external_id_sync:
+                    logger.info(f"Setting external ID for new user {email}: {source_user['external_id']}")
+                    self.api.update_user_setting(response['user_id'], 'external_id', source_user['external_id'])
+                else:
+                    logger.debug(f"Skipping external ID setting for new user {email} (disable_external_id_sync is enabled)")
         else:
             logger.info(f"[DRY RUN] Would create user: {email} in group '{group_name}'")
             
@@ -371,7 +377,10 @@ class UserSynchronizer:
                 logger.debug(f"[DRY RUN] Would skip additional email for new user {email}: additional email is the same as primary email")
                 
             if source_user.get('external_id'):
-                logger.info(f"[DRY RUN] Would set external ID for new user {email}: {source_user['external_id']}")
+                if not self.config.disable_external_id_sync:
+                    logger.info(f"[DRY RUN] Would set external ID for new user {email}: {source_user['external_id']}")
+                else:
+                    logger.debug(f"[DRY RUN] Would skip external ID setting for new user {email} (disable_external_id_sync is enabled)")
 
     def _get_deactivation_reason(self, email: str, source_users: Dict[str, Dict[str, Any]], 
                                current_additional_emails: Dict[int, Optional[str]],

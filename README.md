@@ -33,6 +33,13 @@ graph TD
     style TC fill:#9f9,stroke:#333
 ```
 
+## Common Options
+
+- `TIMECAMP_DISABLE_NEW_USERS=true` - Don't create new users, only update existing ones
+- `TIMECAMP_DISABLE_EXTERNAL_ID_SYNC=true` - Don't sync external IDs for users
+- `TIMECAMP_DISABLE_MANUAL_USER_UPDATES=true` - Skip any updates for users with the `added_manually=1` setting flag
+- `TIMECAMP_USE_SUPERVISOR_GROUPS=false` - Don't use supervisor-based group structures
+
 ## LDAP
 
 - Set the environment variables: `LDAP_HOST`, `LDAP_PORT`, `LDAP_DOMAIN`, `LDAP_DN`, `LDAP_USERNAME`, and `LDAP_PASSWORD`
@@ -40,7 +47,6 @@ graph TD
 - Optionally set `LDAP_PAGE_SIZE` to control the number of results retrieved per page (default is 1000)
 - Optionally set `LDAP_USE_SAMACCOUNTNAME=true` to generate email addresses from sAMAccountName rather than using the mail attribute
 - Optionally set `LDAP_USE_OU_STRUCTURE=true` to use the organizational unit (OU) structure from user's DN as the department value instead of the department attribute
-- Optionally set other params like `TIMECAMP_USE_SUPERVISOR_GROUPS=false`
 - Run `python ldap_fetch.py` to fetch users from LDAP
 - Note: When using sAMAccountName for email, the original mail attribute is always included as `real_email` field if available
 

@@ -4,6 +4,7 @@ import warnings
 from typing import Dict, List, Any, Optional
 from common.logger import setup_logger
 from common.utils import TimeCampConfig
+from datetime import datetime, timedelta
 
 # Suppress SSL verification warnings
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
@@ -191,3 +192,34 @@ class TimeCampAPI:
                     result[user_id] = user_settings[0].get('value') if user_settings else None
         
         return result 
+
+    def add_vacation(self, user_id: int, start_date: str, end_date: str, leave_type_id: str, shouldBe: int, vacationTime: int) -> None:
+        """Add vacation/leave days for a user, iterating over the date range."""
+
+        # Parse the start and end dates
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+        delta = timedelta(days=1)
+
+        # Iterate over the date range and send requests for each day
+        current_date = start
+        while current_date <= end:
+            day_str = current_date.strftime("%Y-%m-%d")
+            data = [{
+            "day": day_str,
+            "dayTypeId": leave_type_id,
+            "shouldBe": shouldBe,
+            "vacationTime": vacationTime,
+            }]
+            logger.debug(f"Vacation data to be sent: {data}")
+            try:
+                self._make_request('POST', f"attendance/{user_id}/user", json=data)
+                logger.info(f"Vacation added for {user_id} on {day_str}, type: {leave_type_id}, shouldBe: {shouldBe}, vacationTime: {vacationTime}")
+            except Exception as e:
+                logger.error(f"Failed to add vacation for {user_id} on {day_str}: {e}")
+            current_date += delta
+        
+    def get_day_types(self) -> List[Dict[str, Any]]:
+        """Fetch the list of day types from TimeCamp API."""
+        response = self._make_request('GET', "attendance/day_types")
+        return response.json().get('data', [])

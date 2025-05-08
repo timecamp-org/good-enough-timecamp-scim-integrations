@@ -118,6 +118,12 @@ class TimeCampAPI:
         """Get additional email settings for multiple users in bulk."""
         return self.get_user_settings(user_ids, 'additional_email', batch_size)
 
+    def get_manually_added_statuses(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, bool]:
+        """Get added_manually settings for multiple users in bulk."""
+        results = self.get_user_settings(user_ids, 'added_manually', batch_size)
+        # Convert 'added_manually' values to boolean values
+        return {user_id: str(value) == '1' for user_id, value in results.items()}
+
     def are_users_enabled(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, bool]:
         """Check if multiple users are enabled in bulk."""
         results = self.get_user_settings(user_ids, 'disabled_user', batch_size)

@@ -14,6 +14,8 @@ class TimeCampConfig:
     skip_departments: str
     use_supervisor_groups: bool
     disable_new_users: bool
+    disable_external_id_sync: bool
+    disable_manual_user_updates: bool
 
     @classmethod
     def from_env(cls) -> 'TimeCampConfig':
@@ -35,6 +37,8 @@ class TimeCampConfig:
         skip_departments = os.getenv('TIMECAMP_SKIP_DEPARTMENTS', '').strip()
         use_supervisor_groups = os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true'
         disable_new_users = os.getenv('TIMECAMP_DISABLE_NEW_USERS', 'false').lower() == 'true'
+        disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
+        disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -51,7 +55,9 @@ class TimeCampConfig:
             show_external_id=show_external_id,
             skip_departments=skip_departments,
             use_supervisor_groups=use_supervisor_groups,
-            disable_new_users=disable_new_users
+            disable_new_users=disable_new_users,
+            disable_external_id_sync=disable_external_id_sync,
+            disable_manual_user_updates=disable_manual_user_updates
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

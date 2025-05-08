@@ -242,10 +242,17 @@ class UserSynchronizer:
                              current_additional_emails: Dict[int, Optional[str]],
                              current_external_ids: Dict[int, Optional[str]],
                              current_roles: Dict[str, List[Dict[str, str]]],
+                             manually_added_users: Dict[int, bool],
                              dry_run: bool = False) -> None:
         """Process an existing user and update their information if needed."""
         if int(tc_user['user_id']) in self.config.ignored_user_ids:
             logger.debug(f"Skipping ignored user: {email} (ID: {tc_user['user_id']})")
+            return
+            
+        # Check if user was manually added and if we should skip updates for these users
+        user_id = int(tc_user['user_id'])
+        if self.config.disable_manual_user_updates and manually_added_users.get(user_id, False):
+            logger.debug(f"Skipping updates for manually added user: {email} (ID: {user_id})")
             return
 
         logger.debug(f"Processing user {email}")
@@ -315,8 +322,15 @@ class UserSynchronizer:
         if updates and not dry_run:
             logger.info(f"Updating user {email}: {', '.join(changes)}")
             self.api.update_user(tc_user['user_id'], updates, tc_user['group_id'])
+            
+            # If group was updated, set added_manually to 0
+            if 'groupId' in updates:
+                logger.info(f"Setting added_manually=0 for user {email} after group change")
+                self.api.update_user_setting(tc_user['user_id'], 'added_manually', '0')
         elif updates:
             logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
+            if 'groupId' in updates:
+                logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after group change")
 
     def _process_new_user(self, email: str, source_user: Dict[str, Any], 
                          group_info: Optional[Dict[str, Any]], dry_run: bool = False) -> None:
@@ -335,6 +349,10 @@ class UserSynchronizer:
         if not dry_run:
             logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{group_name}'")
             response = self.api.add_user(email, source_user['name'], target_group_id)
+            
+            # Set added_manually to 0 since user is created by script
+            logger.info(f"Setting added_manually=0 for new user {email}")
+            self.api.update_user_setting(response['user_id'], 'added_manually', '0')
             
             # Set role if specified (default is User/3)
             desired_role_id = source_user.get('role_id', '3')
@@ -423,11 +441,26 @@ class UserSynchronizer:
         # Save reference to timecamp_users for use in _get_deactivation_reason
         self.timecamp_users_map = timecamp_users
         
+        # Get all user IDs for manually added users check
+        all_timecamp_user_ids = [int(tc_user['user_id']) for _, tc_user in timecamp_users.items()]
+        
+        # Get added_manually settings for all users in batch
+        manually_added_users = {}
+        if all_timecamp_user_ids:
+            manually_added_users = self.api.get_manually_added_statuses(all_timecamp_user_ids)
+        
         for email, tc_user in timecamp_users.items():
-            if int(tc_user['user_id']) in self.config.ignored_user_ids:
+            user_id = int(tc_user['user_id'])
+            
+            if user_id in self.config.ignored_user_ids:
                 logger.debug(f"Skipping ignored user: {email}")
                 continue
 
+            # Skip manually added users if configured
+            if self.config.disable_manual_user_updates and manually_added_users.get(user_id, False):
+                logger.debug(f"Skipping deactivation for manually added user: {email} (ID: {user_id})")
+                continue
+                
             # Get current status - default to True if not specified (assume enabled)
             is_currently_enabled = tc_user.get('is_enabled', True)
             
@@ -465,6 +498,11 @@ class UserSynchronizer:
         if all_timecamp_user_ids:
             current_external_ids = self._get_current_external_ids(all_timecamp_user_ids)
         
+        # Get added_manually settings for all users in batch
+        manually_added_users = {}
+        if all_timecamp_user_ids:
+            manually_added_users = self.api.get_manually_added_statuses(all_timecamp_user_ids)
+        
         # Get current user roles
         current_roles = self.api.get_user_roles()
         
@@ -495,7 +533,7 @@ class UserSynchronizer:
                 if user_id in current_additional_emails:
                     add_email = current_additional_emails[user_id]
                     if add_email and add_email.lower() == source_users[dont_sync_1_email].get('real_email', '').lower():
-                        logger.info(f"Found 'Don't sync 1' user via additional email: {add_email}")
+                        logger.debug(f"Found 'Don't sync 1' user via additional email: {add_email}")
                         
                         # Ensure it's activated
                         if not tc_user.get('is_enabled', True):
@@ -507,7 +545,7 @@ class UserSynchronizer:
                         
                         # Ensure supervisor role (role_id = 2)
                         is_supervisor = False
-                        if user_id in current_roles:
+                        if str(user_id) in current_roles:
                             for role in current_roles.get(str(user_id), []):
                                 if role.get('role_id') == '2':
                                     is_supervisor = True
@@ -515,10 +553,16 @@ class UserSynchronizer:
                         
                         if not is_supervisor:
                             if not dry_run:
-                                logger.info(f"Setting supervisor role for 'Don't sync 1' user with email {email}")
+                                logger.info(f"Setting supervisor role for 'Don't sync 1' user with email {add_email}")
                                 self.api.update_user(user_id, {'isManager': True}, tc_user['group_id'])
+                                # Set added_manually to 0 since user role is updated by script
+                                logger.info(f"Setting added_manually=0 for 'Don't sync 1' user with email {add_email}")
+                                self.api.update_user_setting(user_id, 'added_manually', '0')
                             else:
-                                logger.info(f"[DRY RUN] Would set supervisor role for 'Don't sync 1' user with email {email}")
+                                logger.info(f"[DRY RUN] Would set supervisor role for 'Don't sync 1' user with email {add_email}")
+                                logger.info(f"[DRY RUN] Would set added_manually=0 for 'Don't sync 1' user with email {add_email}")
+                        else:
+                            logger.debug(f"'Don't sync 1' user with email {add_email} already has supervisor role")
                         
                         # Add to processed
                         processed_user_ids.add(user_id)
@@ -543,7 +587,7 @@ class UserSynchronizer:
                     self._process_existing_user(
                         email, source_user, tc_user, 
                         group_info, current_additional_emails, current_external_ids,
-                        current_roles, dry_run
+                        current_roles, manually_added_users, dry_run
                     )
                 # Check for match by additional email
                 elif email.lower() in additional_email_to_user:
@@ -562,7 +606,7 @@ class UserSynchronizer:
                         self._process_existing_user(
                             tc_user['email'], source_user, tc_user,
                             group_info, current_additional_emails, current_external_ids,
-                            current_roles, dry_run
+                            current_roles, manually_added_users, dry_run
                         )
                 else:
                     if not self.config.disable_new_users:
@@ -748,6 +792,8 @@ def setup_synchronization(debug: bool = False) -> Tuple[UserSynchronizer, str]:
     logger.debug(f"Using API key: {config.api_key[:4]}...{config.api_key[-4:]}")
     logger.debug(f"Using supervisor-based groups: {config.use_supervisor_groups}")
     logger.debug(f"Disable new users creation: {config.disable_new_users}")
+    logger.debug(f"Disable external ID sync: {config.disable_external_id_sync}")
+    logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
     
     # Initialize API and synchronizer
     timecamp = TimeCampAPI(config)

@@ -350,55 +350,74 @@ class UserSynchronizer:
             logger.info(f"Creating new user: {email} ({source_user['name']}) in group '{group_name}'")
             response = self.api.add_user(email, source_user['name'], target_group_id)
             
-            # Set added_manually to 0 since user is created by script
-            logger.info(f"Setting added_manually=0 for new user {email}")
-            self.api.update_user_setting(response['user_id'], 'added_manually', '0')
+            # API doesn't return user_id directly, log the response for debugging
+            logger.debug(f"User creation response: {response}")
             
-            # Set role if specified (default is User/3)
-            desired_role_id = source_user.get('role_id', '3')
-            if desired_role_id != '3':  # Only update if not default User role
-                role_names = {'1': 'Administrator', '2': 'Supervisor', '3': 'User', '5': 'Guest'}
-                role_name = role_names.get(desired_role_id, f"role ID {desired_role_id}")
-                logger.info(f"Setting role for new user {email} to {role_name}")
-                
-                # Update role using isManager flag (TimeCamp API does this when role_id = 2)
-                is_manager = desired_role_id == '2'
-                self.api.update_user(response['user_id'], {'isManager': is_manager}, target_group_id)
+            # Store newly created emails for later processing
+            if not hasattr(self, 'newly_created_users'):
+                self.newly_created_users = []
+            self.newly_created_users.append({
+                'email': email, 
+                'name': source_user['name'],
+                'real_email': source_user.get('real_email'),
+                'external_id': source_user.get('external_id'),
+                'role_id': source_user.get('role_id', '3'),
+                'group_id': target_group_id
+            })
             
-            # Set additional email if present and different from primary email
-            if source_user.get('real_email') and source_user['real_email'].lower() != email.lower():
-                logger.info(f"Setting additional email for new user {email}: {source_user['real_email']}")
-                self.api.set_additional_email(response['user_id'], source_user['real_email'])
-            elif source_user.get('real_email'):
-                logger.debug(f"Skipping additional email for new user {email}: additional email is the same as primary email")
-                
-            # Set external_id if present
-            if source_user.get('external_id'):
-                if not self.config.disable_external_id_sync:
-                    logger.info(f"Setting external ID for new user {email}: {source_user['external_id']}")
-                    self.api.update_user_setting(response['user_id'], 'external_id', source_user['external_id'])
-                else:
-                    logger.debug(f"Skipping external ID setting for new user {email} (disable_external_id_sync is enabled)")
+            # The added_manually setting will be handled at the end of synchronization
         else:
             logger.info(f"[DRY RUN] Would create user: {email} in group '{group_name}'")
             
-            # Log role assignment in dry run mode
-            desired_role_id = source_user.get('role_id', '3')
-            if desired_role_id != '3':
-                role_names = {'1': 'Administrator', '2': 'Supervisor', '3': 'User', '5': 'Guest'}
-                role_name = role_names.get(desired_role_id, f"role ID {desired_role_id}")
-                logger.info(f"[DRY RUN] Would set role for new user {email} to {role_name}")
+    def _process_new_users_final(self, dry_run: bool = False) -> None:
+        """Final processing of newly created users at the end of synchronization.
+        This is to ensure we can find and update the user settings after they've been fully created in TimeCamp."""
+        if dry_run or not hasattr(self, 'newly_created_users') or not self.newly_created_users:
+            return
+            
+        logger.info("Performing final processing of newly created users...")
+        
+        # Fetch all users again to get updated list including newly created ones
+        timecamp_users = self.api.get_users()
+        
+        # Create a map of emails to users for quick lookup
+        email_to_user = {user['email'].lower(): user for user in timecamp_users}
+        
+        # Process each newly created user
+        for new_user in self.newly_created_users:
+            email = new_user['email'].lower()
+            user_info = email_to_user.get(email)
+            
+            if user_info:
+                user_id = user_info['user_id']
+                logger.info(f"Found newly created user {email} with ID {user_id}, applying final settings")
                 
-            if source_user.get('real_email') and source_user['real_email'].lower() != email.lower():
-                logger.info(f"[DRY RUN] Would set additional email for new user {email}: {source_user['real_email']}")
-            elif source_user.get('real_email'):
-                logger.debug(f"[DRY RUN] Would skip additional email for new user {email}: additional email is the same as primary email")
+                # Set added_manually to 0
+                logger.info(f"Setting added_manually=0 for new user {email}")
+                self.api.update_user_setting(user_id, 'added_manually', '0')
                 
-            if source_user.get('external_id'):
-                if not self.config.disable_external_id_sync:
-                    logger.info(f"[DRY RUN] Would set external ID for new user {email}: {source_user['external_id']}")
-                else:
-                    logger.debug(f"[DRY RUN] Would skip external ID setting for new user {email} (disable_external_id_sync is enabled)")
+                # Set role if specified (default is User/3)
+                desired_role_id = new_user.get('role_id', '3')
+                if desired_role_id != '3':  # Only update if not default User role
+                    role_names = {'1': 'Administrator', '2': 'Supervisor', '3': 'User', '5': 'Guest'}
+                    role_name = role_names.get(desired_role_id, f"role ID {desired_role_id}")
+                    logger.info(f"Setting role for new user {email} to {role_name}")
+                    
+                    # Update role using isManager flag (TimeCamp API does this when role_id = 2)
+                    is_manager = desired_role_id == '2'
+                    self.api.update_user(user_id, {'isManager': is_manager}, new_user['group_id'])
+                
+                # Set additional email if present and different from primary email
+                if new_user.get('real_email') and new_user['real_email'].lower() != email:
+                    logger.info(f"Setting additional email for new user {email}: {new_user['real_email']}")
+                    self.api.set_additional_email(user_id, new_user['real_email'])
+                
+                # Set external_id if present
+                if new_user.get('external_id') and not self.config.disable_external_id_sync:
+                    logger.info(f"Setting external ID for new user {email}: {new_user['external_id']}")
+                    self.api.update_user_setting(user_id, 'external_id', new_user['external_id'])
+            else:
+                logger.warning(f"Could not find newly created user with email {email} in final processing")
 
     def _get_deactivation_reason(self, email: str, source_users: Dict[str, Dict[str, Any]], 
                                current_additional_emails: Dict[int, Optional[str]],
@@ -485,21 +504,15 @@ class UserSynchronizer:
                      dry_run: bool = False,
                      processed_user_ids: Optional[Set[int]] = None) -> None:
         """Process all users from source data, updating existing users and creating new ones."""
-        # Get all user IDs for additional email and external ID check
+        # Get all user IDs for settings check
         all_timecamp_user_ids = [int(tc_user['user_id']) for _, tc_user in timecamp_users_map.items()]
         
-        # Get current additional email settings for all users in batch
+        # Get multiple user settings at once
+        user_settings = {}
         current_additional_emails = {}
-        if all_timecamp_user_ids:
-            current_additional_emails = self.api.get_additional_emails(all_timecamp_user_ids)
-            
-        # Get current external_id settings for all users in batch
         current_external_ids = {}
-        if all_timecamp_user_ids:
-            current_external_ids = self._get_current_external_ids(all_timecamp_user_ids)
-        
-        # Get added_manually settings for all users in batch
         manually_added_users = {}
+        
         if all_timecamp_user_ids:
             manually_added_users = self.api.get_manually_added_statuses(all_timecamp_user_ids)
         
@@ -687,6 +700,9 @@ class UserSynchronizer:
     def sync(self, users_file: str, dry_run: bool = False) -> None:
         """Synchronize users between source data and TimeCamp."""
         try:
+            # Reset newly_created_users list for this run
+            self.newly_created_users = []
+            
             # Step 1: Get source users and department paths
             source_users, department_paths = self._get_source_users(users_file)
             
@@ -739,14 +755,15 @@ class UserSynchronizer:
             # Step 7: Process deactivations
             self._process_deactivations(timecamp_users_map, source_users, current_additional_emails, processed_user_ids, dry_run)
             
+            # Step 8: Final processing of newly created users
+            self._process_new_users_final(dry_run)
+            
             logger.info("Synchronization completed successfully")
         except Exception as e:
             logger.error(f"Error during synchronization: {str(e)}")
             raise
 
-    def _get_current_external_ids(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, Optional[str]]:
-        """Get external_id settings for multiple users in bulk."""
-        return self.api.get_user_settings(user_ids, 'external_id', batch_size)
+
 
 def setup_synchronization(debug: bool = False) -> Tuple[UserSynchronizer, str]:
     """Set up the synchronization environment and return the synchronizer and users file path."""

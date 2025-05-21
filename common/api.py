@@ -22,10 +22,10 @@ class TimeCampAPI:
         
         logger.debug(f"API Request: {method} {url}")
         # logger.debug(f"Headers: {self.headers}")
-        # if 'json' in kwargs:
-        #     logger.debug(f"Request JSON: {kwargs['json']}")
-        # if 'params' in kwargs:
-        #     logger.debug(f"Request params: {kwargs['params']}")
+        if 'json' in kwargs:
+            logger.debug(f"Request JSON: {kwargs['json']}")
+        if 'params' in kwargs:
+            logger.debug(f"Request params: {kwargs['params']}")
         
         for attempt in range(max_retries):
             try:
@@ -114,17 +114,17 @@ class TimeCampAPI:
         """Set additional email for a user."""
         self._make_request('PUT', f"user/{user_id}/setting", json={"name": "additional_email", "value": email})
 
-    def get_additional_emails(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, Optional[str]]:
+    def get_additional_emails(self, user_ids: List[int], batch_size: int = 200) -> Dict[int, Optional[str]]:
         """Get additional email settings for multiple users in bulk."""
         return self.get_user_settings(user_ids, 'additional_email', batch_size)
 
-    def get_manually_added_statuses(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, bool]:
+    def get_manually_added_statuses(self, user_ids: List[int], batch_size: int = 200) -> Dict[int, bool]:
         """Get added_manually settings for multiple users in bulk."""
         results = self.get_user_settings(user_ids, 'added_manually', batch_size)
         # Convert 'added_manually' values to boolean values
         return {user_id: str(value) == '1' for user_id, value in results.items()}
 
-    def are_users_enabled(self, user_ids: List[int], batch_size: int = 50) -> Dict[int, bool]:
+    def are_users_enabled(self, user_ids: List[int], batch_size: int = 200) -> Dict[int, bool]:
         """Check if multiple users are enabled in bulk."""
         results = self.get_user_settings(user_ids, 'disabled_user', batch_size)
         # Convert 'disabled_user' values to boolean 'is_enabled' values
@@ -166,7 +166,7 @@ class TimeCampAPI:
         
         return user_roles
 
-    def get_user_settings(self, user_ids: List[int], setting_name: str, batch_size: int = 50) -> Dict[int, Optional[str]]:
+    def get_user_settings(self, user_ids: List[int], setting_name: str, batch_size: int = 100) -> Dict[int, Optional[str]]:
         """Get specific user settings for multiple users in bulk."""
         result = {}
         for i in range(0, len(user_ids), batch_size):

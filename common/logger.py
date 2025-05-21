@@ -28,7 +28,7 @@ def setup_logger(name: str = 'timecamp_sync', debug: bool = False) -> logging.Lo
             backupCount=5
         )
         file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.DEBUG)
         
         # Console handler
         console_handler = logging.StreamHandler()

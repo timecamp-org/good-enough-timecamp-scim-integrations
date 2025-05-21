@@ -131,7 +131,6 @@ def fetch_bamboo_users():
                 "department": combined_department,
                 "status": "active",
                 "supervisor_id": emp.get('supervisorId', ''),
-                "emp": emp,
             }
             users.append(user)
         

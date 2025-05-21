@@ -110,13 +110,14 @@ def fetch_bamboo_users():
         today = datetime.today().strftime('%Y-%m-%d')
         
         for emp in all_employees:
-            # Filter out vendors and terminated employees
+            # Filter out vendors, terminated employees, and users with no email
             employment_status = emp.get('employmentStatus', '')
             hire_date = emp.get('hireDate', '')
             
             if (employment_status.startswith('Vendor') or 
                 employment_status == 'Terminated' or
-                (hire_date and hire_date > today)):
+                (hire_date and hire_date > today) or
+                not emp.get('email')):
                 continue
                 
             # Join department and division with a forward slash if both exist

@@ -26,6 +26,10 @@ def fetch_bamboo_users():
             except json.JSONDecodeError:
                 logger.warning("Invalid BAMBOOHR_EXCLUDE_FILTER format, filter will be skipped")
         
+        # Get excluded departments
+        excluded_departments_str = os.getenv('BAMBOOHR_EXCLUDED_DEPARTMENTS', '')
+        excluded_departments = [dept.strip() for dept in excluded_departments_str.split(',') if dept.strip()]
+        
         if not all([subdomain, api_key]):
             raise ValueError("Missing required environment variables")
         
@@ -110,25 +114,25 @@ def fetch_bamboo_users():
         today = datetime.today().strftime('%Y-%m-%d')
         
         for emp in all_employees:
-            # Filter out vendors, terminated employees, and users with no email
+            # Filter out terminated employees, future employees, and users with no email
             employment_status = emp.get('employmentStatus', '')
             hire_date = emp.get('hireDate', '')
+            department = emp.get('jobInformationDepartment', '')
             
-            if (employment_status.startswith('Vendor') or 
-                employment_status == 'Terminated' or
+            if (employment_status == 'Terminated' or
                 (hire_date and hire_date > today) or
-                not emp.get('email')):
+                not emp.get('email') or
+                department in excluded_departments):
                 continue
                 
             # Join department and division with a forward slash if both exist
-            department = emp.get('jobInformationDepartment', '')
             division = emp.get('jobInformationDivision', '')
-            combined_department = f"{department}/{division}" if department and division else department or division or ''
+            combined_department = f"{division}/{department}" if department and division else department or division or ''
             
             user = {
                 "external_id": emp.get('employeeNumber'),
                 "name": emp.get('name', '').strip(),
-                "email": emp.get('email'),
+                "email": emp.get('email').replace('@', '@test-'),
                 "department": combined_department,
                 "status": "active",
                 "supervisor_id": emp.get('supervisorId', ''),

@@ -45,12 +45,7 @@ def fetch_bamboo_users():
             {
                 "field": "employmentStatus",
                 "operator": "does_not_include",
-                "value": ["Terminated"]
-            },
-            {
-                "field": "status",
-                "operator": "does_not_include",
-                "value": ["Inactive"]
+                "value": ["Terminated"],
             }
         ]
         
@@ -67,7 +62,10 @@ def fetch_bamboo_users():
             "jobInformationDepartment",
             "jobInformationDivision",
             "isSupervisor",
-            "supervisorId"
+            "supervisorId",
+            "employmentStatus",
+            "hireDate",
+            "status"
         ]
         
         # Prepare request payload
@@ -95,6 +93,8 @@ def fetch_bamboo_users():
             data = response.json()
             employees = data.get('data', [])
             pagination = data.get('pagination', {})
+
+            # logger.info(f"Page {current_page} employees: {json.dumps(employees, indent=2)}")
             
             all_employees.extend(employees)
             
@@ -107,7 +107,18 @@ def fetch_bamboo_users():
         
         # Transform to our schema
         users = []
+        today = datetime.today().strftime('%Y-%m-%d')
+        
         for emp in all_employees:
+            # Filter out vendors and terminated employees
+            employment_status = emp.get('employmentStatus', '')
+            hire_date = emp.get('hireDate', '')
+            
+            if (employment_status.startswith('Vendor') or 
+                employment_status == 'Terminated' or
+                (hire_date and hire_date > today)):
+                continue
+                
             # Join department and division with a forward slash if both exist
             department = emp.get('jobInformationDepartment', '')
             division = emp.get('jobInformationDivision', '')
@@ -119,7 +130,8 @@ def fetch_bamboo_users():
                 "email": emp.get('email'),
                 "department": combined_department,
                 "status": "active",
-                "supervisor_id": emp.get('supervisorId', '')
+                "supervisor_id": emp.get('supervisorId', ''),
+                "emp": emp,
             }
             users.append(user)
         

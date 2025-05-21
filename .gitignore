@@ -9,3 +9,4 @@ users.json
 vacation.json
 logs/
 .DS_Store
+users*.json

@@ -1,5 +1,7 @@
 # TimeCamp SCIM Integrations
 
+**⚠️ IMPORTANT: BY DEFAULT IF ACCOUNT DOESN'T HAVE ENOUGH PAID SEATS IN SAAS, THEY WILL BE INCREASED AUTOMATICALLY**
+
 Scripts to synchronize users from various HR systems with TimeCamp. Currently supports:
 - BambooHR
 - Azure AD / Microsoft Entra ID

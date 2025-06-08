@@ -820,4 +820,5 @@ if __name__ == "__main__":
     logger = setup_logger('timecamp_sync', args.debug)
     
     logger.info("Starting synchronization")
+    logger.info("BY DEFAULT IF ACCOUNT DON'T HAVE ENOUGHT PAID SEATS, THEY WILL BE ADDED AUTOMATICALLY")
     sync_users(dry_run=args.dry_run, debug=args.debug) 

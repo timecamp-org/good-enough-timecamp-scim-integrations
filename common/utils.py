@@ -75,8 +75,6 @@ def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't a
     replacements = {
         "(": "",
         ")": "",
-        "[": "",
-        "]": "",
         "{": "",
         "}": "",
         "`": "",

@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""
+Stage 1: Prepare TimeCamp Data
+This script reads the source users.json and generates timecamp_users.json
+with the final structure ready for TimeCamp synchronization.
+"""
+
+import os
+import json
+import argparse
+from typing import Dict, List, Any, Set, Tuple, Optional
+from dotenv import load_dotenv
+from common.logger import setup_logger
+from common.utils import TimeCampConfig, clean_name, get_users_file
+from common.supervisor_groups import process_source_data
+
+# Load environment variables
+load_dotenv()
+
+# Initialize logger
+logger = setup_logger('prepare_timecamp_data')
+
+
+def determine_role(source_user: Dict[str, Any]) -> str:
+    """Determine the TimeCamp role based on source user data."""
+    # Check if role_id is specified in source data
+    role_id = source_user.get('role_id', '3')
+    
+    # Map role IDs to role names
+    role_map = {
+        '1': 'administrator',
+        '2': 'supervisor', 
+        '3': 'user',
+        '5': 'guest'
+    }
+    
+    return role_map.get(role_id, 'user')
+
+
+def process_group_path(department: Optional[str], config: TimeCampConfig) -> str:
+    """Process the department path considering skip_departments configuration."""
+    if not department:
+        return ""
+    
+    # Skip departments logic is already applied in process_source_data via clean_department_path
+    # This is just for any additional processing if needed
+    return department
+
+
+def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) -> List[Dict[str, Any]]:
+    """Process source data and prepare the final TimeCamp user structure."""
+    # Process source data using the supervisor_groups module
+    # This applies all the configuration options:
+    # - TIMECAMP_USE_SUPERVISOR_GROUPS
+    # - TIMECAMP_USE_DEPARTMENT_GROUPS  
+    # - TIMECAMP_USE_JOB_TITLE_NAME
+    # - TIMECAMP_SHOW_EXTERNAL_ID
+    # - TIMECAMP_SKIP_DEPARTMENTS
+    processed_users, department_paths = process_source_data(source_data, config)
+    
+    logger.debug(f"Processed {len(processed_users)} users with {len(department_paths)} unique department paths")
+    
+    timecamp_users = []
+    
+    for email, user_data in processed_users.items():
+        # Determine status
+        status = 'active' if user_data.get('status', '').lower() == 'active' else 'inactive'
+        
+        # The department/group breadcrumb has already been processed with all configurations
+        group_breadcrumb = user_data.get('department', '')
+        
+        # Determine role
+        role = determine_role(user_data)
+        
+        # Create TimeCamp user structure
+        timecamp_user = {
+            'timecamp_external_id': user_data.get('external_id', ''),
+            'timecamp_user_name': user_data['name'],  # Already formatted by process_source_data
+            'timecamp_email': email,
+            'timecamp_groups_breadcrumb': group_breadcrumb,
+            'timecamp_status': status,
+            'timecamp_role': role
+        }
+        
+        # Add real_email if present and different from primary email
+        if user_data.get('real_email') and user_data['real_email'].lower() != email.lower():
+            timecamp_user['timecamp_real_email'] = user_data['real_email']
+        
+        timecamp_users.append(timecamp_user)
+    
+    # Sort users by email for consistent output
+    timecamp_users.sort(key=lambda x: x['timecamp_email'])
+    
+    return timecamp_users
+
+
+def main():
+    """Main function to prepare TimeCamp data."""
+    parser = argparse.ArgumentParser(
+        description="Prepare TimeCamp user data from source users.json"
+    )
+    parser.add_argument("--debug", action="store_true", 
+                      help="Enable debug logging")
+    parser.add_argument("--output", default="timecamp_users.json",
+                      help="Output file name (default: timecamp_users.json)")
+    parser.add_argument("--pretty", action="store_true",
+                      help="Pretty print the JSON output")
+    
+    args = parser.parse_args()
+    
+    # Update logger with debug setting
+    global logger
+    logger = setup_logger('prepare_timecamp_data', args.debug)
+    
+    try:
+        # Load configuration
+        config = TimeCampConfig.from_env()
+        logger.info("Loaded configuration from environment")
+        
+        # Log all configuration options to show they're being considered
+        logger.info("Configuration settings:")
+        logger.info(f"  - TIMECAMP_USE_SUPERVISOR_GROUPS: {config.use_supervisor_groups}")
+        logger.info(f"  - TIMECAMP_USE_DEPARTMENT_GROUPS: {config.use_department_groups}")
+        if config.use_supervisor_groups and config.use_department_groups:
+            logger.info("    → Using HYBRID mode: Department groups with supervisor subgroups")
+        elif config.use_supervisor_groups:
+            logger.info("    → Using SUPERVISOR-ONLY mode: Groups based on supervisor hierarchy")
+        else:
+            logger.info("    → Using DEPARTMENT-ONLY mode: Traditional department-based groups")
+        
+        logger.info(f"  - TIMECAMP_USE_JOB_TITLE_NAME: {config.use_job_title_name}")
+        if config.use_job_title_name:
+            logger.info("    → User names will be formatted as: 'Job Title [Name]'")
+        
+        logger.info(f"  - TIMECAMP_SHOW_EXTERNAL_ID: {config.show_external_id}")
+        if config.show_external_id:
+            logger.info("    → External IDs will be appended to user names")
+            
+        logger.info(f"  - TIMECAMP_SKIP_DEPARTMENTS: '{config.skip_departments}'")
+        if config.skip_departments:
+            logger.info(f"    → Will skip department prefix: '{config.skip_departments}'")
+            
+        logger.info(f"  - TIMECAMP_DISABLE_NEW_USERS: {config.disable_new_users}")
+        logger.info(f"  - TIMECAMP_DISABLE_EXTERNAL_ID_SYNC: {config.disable_external_id_sync}")
+        logger.info(f"  - TIMECAMP_DISABLE_MANUAL_USER_UPDATES: {config.disable_manual_user_updates}")
+        
+        # Get source users file
+        users_file = get_users_file()
+        logger.info(f"Reading source data from: {users_file}")
+        
+        # Load source data
+        with open(users_file, 'r') as f:
+            source_data = json.load(f)
+        
+        logger.info(f"Loaded {len(source_data.get('users', []))} users from source")
+        
+        # Process and prepare TimeCamp users
+        timecamp_users = prepare_timecamp_users(source_data, config)
+        
+        logger.info(f"Prepared {len(timecamp_users)} users for TimeCamp")
+        
+        # Count active/inactive users
+        active_count = sum(1 for u in timecamp_users if u['timecamp_status'] == 'active')
+        inactive_count = len(timecamp_users) - active_count
+        logger.info(f"Active users: {active_count}, Inactive users: {inactive_count}")
+        
+        # Count users by role
+        role_counts = {}
+        for user in timecamp_users:
+            role = user['timecamp_role']
+            role_counts[role] = role_counts.get(role, 0) + 1
+        
+        for role, count in sorted(role_counts.items()):
+            logger.info(f"{role.capitalize()} users: {count}")
+        
+        # Count unique group paths
+        unique_groups = {u['timecamp_groups_breadcrumb'] for u in timecamp_users if u['timecamp_groups_breadcrumb']}
+        logger.info(f"Unique group paths: {len(unique_groups)}")
+        
+        # Write output
+        with open(args.output, 'w') as f:
+            if args.pretty:
+                json.dump(timecamp_users, f, indent=2, ensure_ascii=False)
+            else:
+                json.dump(timecamp_users, f, ensure_ascii=False)
+        
+        logger.info(f"Successfully wrote TimeCamp data to: {args.output}")
+        
+        # Show some sample data in debug mode
+        if args.debug and timecamp_users:
+            logger.debug("Sample user data:")
+            logger.debug(json.dumps(timecamp_users[0], indent=2))
+            
+    except Exception as e:
+        logger.error(f"Error preparing TimeCamp data: {str(e)}")
+        raise
+
+
+if __name__ == "__main__":
+    main() 

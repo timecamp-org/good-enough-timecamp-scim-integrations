@@ -340,5 +340,16 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
                 users_by_id[user['external_id']] = user
         department_paths = assign_departments_standard(source_data, config)
 
+    # IMPORTANT: Sync the updated departments back to users_by_id
+    # The assign_departments_* functions update source_data['users'], but we need
+    # to sync those changes back to our users_by_id dictionary
+    for user in source_data['users']:
+        user_id = user.get('external_id')
+        if user_id and user_id in users_by_id:
+            # Update the department and role information
+            users_by_id[user_id]['department'] = user.get('department', '')
+            users_by_id[user_id]['role_id'] = user.get('role_id', '3')
+            users_by_id[user_id]['isManager'] = user.get('isManager', False)
+
     # Return processed users by email instead of original source data
     return {user['email'].lower(): user for user in users_by_id.values()}, department_paths 

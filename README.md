@@ -21,19 +21,97 @@ cp .env.sample .env
 
 ## System Architecture
 
+### Original One-Stage Process
+
 ```mermaid
 graph TD
     BH[1a: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
     BH -->|saves| JSON[users.json]
     AD[1b: Azure/Entra Fetcher] -->|use| GRAPH[Microsoft Graph API]
     AD -->|saves| JSON
+    LD[1c: LDAP Fetcher] -->|use| LDAPI[LDAP Server]
+    LD -->|saves| JSON
     TC[2: TimeCamp Synchronizer] -->|uses| JSON
     TC -->|use| TAPI[TimeCamp API]
     
     style BH fill:#f9f,stroke:#333
     style AD fill:#f9f,stroke:#333
+    style LD fill:#f9f,stroke:#333
     style TC fill:#9f9,stroke:#333
 ```
+
+### New Two-Stage Process (Recommended)
+
+```mermaid
+graph TD
+    BH[1a: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
+    BH -->|saves| JSON1[users.json]
+    AD[1b: Azure/Entra Fetcher] -->|use| GRAPH[Microsoft Graph API]
+    AD -->|saves| JSON1
+    LD[1c: LDAP Fetcher] -->|use| LDAPI[LDAP Server]
+    LD -->|saves| JSON1
+    
+    PREP[2: Data Preparation] -->|reads| JSON1
+    PREP -->|creates| JSON2[timecamp_users.json]
+    
+    SYNC[3: TimeCamp Sync V2] -->|reads| JSON2
+    SYNC -->|use| TAPI[TimeCamp API]
+    
+    style BH fill:#f9f,stroke:#333
+    style AD fill:#f9f,stroke:#333
+    style LD fill:#f9f,stroke:#333
+    style PREP fill:#ff9,stroke:#333
+    style SYNC fill:#9f9,stroke:#333
+```
+
+## Two-Stage Synchronization Process
+
+The synchronization has been refactored into two separate stages for better maintainability and debugging:
+
+### Stage 1: Data Preparation
+```bash
+python3 prepare_timecamp_data.py
+```
+
+This script:
+- Reads the source `users.json` file
+- Processes supervisor/department structures based on configuration
+- Formats user names according to preferences (e.g., "Job Title [Name]")
+- Outputs a normalized `timecamp_users.json` file
+
+Options:
+- `--debug` - Enable debug logging
+- `--output <filename>` - Specify output file (default: timecamp_users.json)
+- `--pretty` - Pretty print the JSON output
+
+Example output structure:
+```json
+[{
+    "timecamp_external_id": "115",
+    "timecamp_user_name": "Access administration Team Lead [Oleksandr Budonnyi]",
+    "timecamp_email": "aleksandr.b@test-brainrocket.com",
+    "timecamp_groups_breadcrumb": "R&D/Information Security",
+    "timecamp_status": "active",
+    "timecamp_role": "user",
+    "timecamp_real_email": "real.email@example.com"
+}]
+```
+
+### Stage 2: TimeCamp Synchronization
+```bash
+python3 timecamp_sync_v2.py
+```
+
+This script:
+- Reads the prepared `timecamp_users.json` file
+- Creates/updates group structure in TimeCamp
+- Creates/updates/deactivates users as needed
+- Handles role assignments and user settings
+
+Options:
+- `--dry-run` - Simulate without making changes
+- `--debug` - Enable debug logging
+- `--input <filename>` - Specify input file (default: timecamp_users.json)
 
 ## Common Options
 
@@ -113,26 +191,33 @@ python bamboohr_fetch.py
 
 # For Azure AD / Microsoft Entra ID:
 python azuread_fetch.py
+
+# For LDAP:
+python ldap_fetch.py
 ```
 
-2. Review the generated files to ensure the data is correct:
-   - For both sources, check `users.json` matches the format shown in `users.json.sample`
-   - For Azure AD, the users.json file will include group memberships in the "groups" field for each user
+2. Prepare the data for TimeCamp:
+```bash
+# Generate timecamp_users.json with formatted data
+python prepare_timecamp_data.py --pretty --debug
+```
 
-3. Test TimeCamp sync with dry-run:
+3. Review the generated `timecamp_users.json` to ensure the data is correct
+
+4. Test TimeCamp sync with dry-run:
 ```bash
 # Test sync without making any changes
-python timecamp_sync.py --dry-run
+python timecamp_sync_v2.py --dry-run --debug
 ```
 
-4. If the dry run looks good, run the actual sync:
+5. If the dry run looks good, run the actual sync:
 ```bash
-python timecamp_sync.py
+python timecamp_sync_v2.py
 ```
 
 ## Crontab Setup
 
-To automate the synchronization, add these entries to your crontab:
+To automate the synchronization with the two-stage process:
 
 ```bash
 # Edit crontab
@@ -148,14 +233,30 @@ crontab -e
 # Fetch users and groups every hour (token refresh is handled automatically)
 0 * * * * cd /path/to/project && python3 azuread_fetch.py
 
-# Sync with TimeCamp 5 minutes after fetch
-5 * * * * cd /path/to/project && python3 timecamp_sync.py
+# For LDAP:
+# Fetch users from LDAP every hour
+0 * * * * cd /path/to/project && python3 ldap_fetch.py
+
+# Prepare TimeCamp data 5 minutes after fetch
+5 * * * * cd /path/to/project && python3 prepare_timecamp_data.py
+
+# Sync with TimeCamp 10 minutes after fetch
+10 * * * * cd /path/to/project && python3 timecamp_sync_v2.py
 ```
 
 Notes:
 - Replace `/path/to/project` with the actual path to your project
 - Replace `python3` with the path to your Python interpreter (find it using `which python3`)
 - All operations are logged to `logs/sync.log`
+
+### Using the Original One-Stage Process
+
+If you prefer to use the original one-stage synchronization:
+
+```bash
+# Run the original sync script directly after fetching
+python timecamp_sync.py [--dry-run] [--debug]
+```
 
 ## Troubleshooting
 

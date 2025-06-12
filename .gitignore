@@ -11,3 +11,4 @@ logs/
 .DS_Store
 users*.json
 *.txt
+timecamp_users.json

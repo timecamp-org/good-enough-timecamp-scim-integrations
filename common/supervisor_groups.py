@@ -76,8 +76,11 @@ def build_supervisor_paths(source_data: Dict[str, Any],
 def assign_departments_supervisor(source_data: Dict[str, Any], 
                                users_by_id: Dict[str, Dict[str, Any]], 
                                supervisor_ids: Set[str], 
-                               supervisor_paths: Dict[str, str]) -> Set[str]:
+                               supervisor_paths: Dict[str, str],
+                               config) -> Set[str]:
     """Assign departments based on supervisor hierarchy."""
+    from common.utils import clean_department_path
+    
     department_paths = set()
     
     # First pass: identify users with subordinates
@@ -108,13 +111,14 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
         if is_a_supervisor:
             # User is a supervisor - assign to their path in the hierarchy
             if user_id in supervisor_paths:
-                user['department'] = supervisor_paths[user_id]
+                # Apply skip_departments configuration to supervisor paths
+                user['department'] = clean_department_path(supervisor_paths[user_id], config)
                 if user['department']:
                     department_paths.add(user['department'])
                     logger.debug(f"Supervisor {user.get('name')} assigned to group: {user['department']}")
             elif not has_supervisor:
                 # Fallback for top-level supervisor
-                user['department'] = user.get('name', '')
+                user['department'] = clean_department_path(user.get('name', ''), config)
                 if user['department']:
                     department_paths.add(user['department'])
                     logger.debug(f"Top-level supervisor {user.get('name')} assigned to own group: {user['department']}")
@@ -122,8 +126,8 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
             # Regular user with supervisor
             supervisor_id = user.get('supervisor_id')
             if supervisor_id in supervisor_paths:
-                # Assign to the same group as their supervisor
-                user['department'] = supervisor_paths[supervisor_id]
+                # Assign to the same group as their supervisor with skip_departments applied
+                user['department'] = clean_department_path(supervisor_paths[supervisor_id], config)
                 logger.debug(f"User {user.get('name')} assigned to supervisor's group: {user['department']}")
                 if user['department']:
                     department_paths.add(user['department'])
@@ -131,7 +135,7 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
                 # Fallback: direct supervisor's name
                 supervisor = users_by_id.get(supervisor_id)
                 if supervisor:
-                    user['department'] = supervisor.get('name', '')
+                    user['department'] = clean_department_path(supervisor.get('name', ''), config)
                     logger.debug(f"User {user.get('name')} assigned to supervisor's group: {user['department']}")
                     if user['department']:
                         department_paths.add(user['department'])
@@ -154,9 +158,134 @@ def assign_departments_standard(source_data: Dict[str, Any], config) -> Set[str]
                 department_paths.add(user['department'])
     return department_paths
 
+def assign_departments_hybrid(source_data: Dict[str, Any], 
+                            users_by_id: Dict[str, Dict[str, Any]], 
+                            supervisor_ids: Set[str], 
+                            supervisor_paths: Dict[str, str],
+                            config) -> Set[str]:
+    """
+    Assign departments using hybrid approach: department + supervisor hierarchy.
+    
+    This function creates a hierarchical group structure where departments are the top level,
+    and supervisors create subgroups within those departments.
+    
+    Examples of resulting group structure:
+    
+    Input data:
+    - John Doe (external_id: 123, department: "Engineering", supervisor_id: "")
+    - Jane Smith (external_id: 124, department: "Engineering/Frontend", supervisor_id: "123")
+    - Bob Wilson (external_id: 125, department: "Sales/EMEA", supervisor_id: "")
+    - Alice Johnson (external_id: 126, department: "Sales/EMEA", supervisor_id: "125")
+    
+    With hybrid mode (both TIMECAMP_USE_SUPERVISOR_GROUPS=true and TIMECAMP_USE_DEPARTMENT_GROUPS=true):
+    - John Doe → "Engineering/John Doe" (supervisor gets their own subgroup)
+    - Jane Smith → "Engineering/Frontend/John Doe" (user assigned to supervisor's subgroup within their department)
+    - Bob Wilson → "Sales/EMEA/Bob Wilson" (supervisor gets their own subgroup)
+    - Alice Johnson → "Sales/EMEA/Bob Wilson" (user assigned to supervisor's subgroup)
+    
+    This creates TimeCamp groups:
+    - Engineering/John Doe
+    - Engineering/Frontend/John Doe  
+    - Sales/EMEA/Bob Wilson
+    
+    Args:
+        source_data: The source data containing users information
+        users_by_id: Dictionary mapping external_id to user data
+        supervisor_ids: Set of external_ids that are supervisors (have subordinates)
+        supervisor_paths: Dictionary mapping supervisor external_id to their path in hierarchy
+        config: The TimeCampConfig object containing configuration settings
+        
+    Returns:
+        A set of department paths to be created in TimeCamp
+    """
+    from common.utils import clean_department_path
+    
+    department_paths = set()
+    
+    # First pass: identify users with subordinates
+    users_with_subordinates = set()
+    for user in source_data['users']:
+        supervisor_id = user.get('supervisor_id')
+        if supervisor_id and supervisor_id.strip():
+            users_with_subordinates.add(supervisor_id)
+    
+    # Second pass: build department-supervisor paths
+    for user in source_data['users']:
+        user_id = user.get('external_id')
+        if not user_id:
+            continue
+            
+        # Clean the original department path
+        original_department = clean_department_path(user.get('department', ''), config)
+        
+        # Check if user is a supervisor
+        is_a_supervisor = user_id in supervisor_ids
+        has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
+        
+        # Set role_id based on having subordinates (2 = Supervisor, 3 = User)
+        if user_id in users_with_subordinates:
+            user['role_id'] = '2'  # Supervisor role
+        else:
+            user['role_id'] = '3'  # Regular user role
+        
+        # Keep isManager flag for backward compatibility
+        user['isManager'] = user_id in users_with_subordinates
+        
+        if original_department:
+            # User has a department
+            if is_a_supervisor and user_id in supervisor_paths:
+                # Supervisor: combine department with supervisor path
+                supervisor_name = supervisor_paths[user_id].split('/')[-1]  # Get the last part (supervisor's own name)
+                user['department'] = f"{original_department}/{supervisor_name}"
+                logger.debug(f"Supervisor {user.get('name')} assigned to hybrid group: {user['department']}")
+            elif has_supervisor:
+                # Regular user with supervisor: combine department with supervisor's name
+                supervisor_id = user.get('supervisor_id')
+                supervisor = users_by_id.get(supervisor_id)
+                if supervisor:
+                    supervisor_name = supervisor.get('name', '').split(' - ')[0]  # Remove external_id suffix if present
+                    user['department'] = f"{original_department}/{supervisor_name}"
+                    logger.debug(f"User {user.get('name')} assigned to hybrid group: {user['department']}")
+                else:
+                    # Fallback: just use department
+                    user['department'] = original_department
+                    logger.debug(f"User {user.get('name')} assigned to department group (supervisor not found): {user['department']}")
+            else:
+                # User without supervisor: just use department
+                user['department'] = original_department
+                logger.debug(f"User {user.get('name')} assigned to department group: {user['department']}")
+        else:
+            # User has no department - fall back to supervisor-only logic
+            if is_a_supervisor and user_id in supervisor_paths:
+                user['department'] = supervisor_paths[user_id]
+                logger.debug(f"Supervisor {user.get('name')} (no dept) assigned to group: {user['department']}")
+            elif has_supervisor:
+                supervisor_id = user.get('supervisor_id')
+                if supervisor_id in supervisor_paths:
+                    user['department'] = supervisor_paths[supervisor_id]
+                    logger.debug(f"User {user.get('name')} (no dept) assigned to supervisor's group: {user['department']}")
+                else:
+                    supervisor = users_by_id.get(supervisor_id)
+                    if supervisor:
+                        user['department'] = supervisor.get('name', '')
+                        logger.debug(f"User {user.get('name')} (no dept) assigned to supervisor's group: {user['department']}")
+                    else:
+                        user['department'] = ""  # Root group
+                        logger.debug(f"User {user.get('name')} (no dept, no supervisor) placed in root group")
+            else:
+                # No department, no supervisor - place in root group
+                user['department'] = ""
+                logger.debug(f"User {user.get('name')} (no dept, no supervisor) placed in root group")
+        
+        # Add to department paths if not empty
+        if user.get('department'):
+            department_paths.add(user['department'])
+    
+    return department_paths
+
 def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, Dict[str, Any]], Set[str]]:
     """
-    Process source data to build supervisor-based groups or standard department groups.
+    Process source data to build supervisor-based groups, standard department groups, or hybrid structure.
     
     Args:
         source_data: The source data containing users information
@@ -170,18 +299,33 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
     # First pass: collect users and identify supervisors
     users_by_id, supervisor_ids = collect_users_and_supervisors(source_data, config.show_external_id)
     
-    # If using supervisor-based groups
     department_paths = set()
-    if config.use_supervisor_groups:
+    
+    if config.use_supervisor_groups and config.use_department_groups:
+        # Hybrid approach: combine departments with supervisor hierarchy
+        logger.debug("Using hybrid approach: departments + supervisors")
+        
+        # Second pass: build supervisor paths
+        supervisor_paths = build_supervisor_paths(source_data, users_by_id, supervisor_ids)
+        
+        # Third pass: assign departments using hybrid approach
+        department_paths = assign_departments_hybrid(
+            source_data, users_by_id, supervisor_ids, supervisor_paths, config
+        )
+    elif config.use_supervisor_groups:
+        # Pure supervisor-based groups
+        logger.debug("Using supervisor-based groups only")
+        
         # Second pass: build supervisor paths
         supervisor_paths = build_supervisor_paths(source_data, users_by_id, supervisor_ids)
         
         # Third pass: assign departments based on supervisor hierarchy
         department_paths = assign_departments_supervisor(
-            source_data, users_by_id, supervisor_ids, supervisor_paths
+            source_data, users_by_id, supervisor_ids, supervisor_paths, config
         )
     else:
         # Traditional department-based structure
+        logger.debug("Using traditional department-based structure")
         department_paths = assign_departments_standard(source_data, config)
 
     return {user['email'].lower(): user for user in source_data['users']}, department_paths 

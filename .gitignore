@@ -10,3 +10,4 @@ vacation.json
 logs/
 .DS_Store
 users*.json
+*.txt

@@ -13,6 +13,7 @@ class TimeCampConfig:
     show_external_id: bool
     skip_departments: str
     use_supervisor_groups: bool
+    use_department_groups: bool
     disable_new_users: bool
     disable_external_id_sync: bool
     disable_manual_user_updates: bool
@@ -36,6 +37,7 @@ class TimeCampConfig:
         show_external_id = os.getenv('TIMECAMP_SHOW_EXTERNAL_ID', 'true').lower() == 'true'
         skip_departments = os.getenv('TIMECAMP_SKIP_DEPARTMENTS', '').strip()
         use_supervisor_groups = os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true'
+        use_department_groups = os.getenv('TIMECAMP_USE_DEPARTMENT_GROUPS', 'true').lower() == 'true'
         disable_new_users = os.getenv('TIMECAMP_DISABLE_NEW_USERS', 'false').lower() == 'true'
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
@@ -55,6 +57,7 @@ class TimeCampConfig:
             show_external_id=show_external_id,
             skip_departments=skip_departments,
             use_supervisor_groups=use_supervisor_groups,
+            use_department_groups=use_department_groups,
             disable_new_users=disable_new_users,
             disable_external_id_sync=disable_external_id_sync,
             disable_manual_user_updates=disable_manual_user_updates

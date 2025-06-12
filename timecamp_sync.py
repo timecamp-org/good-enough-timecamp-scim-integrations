@@ -775,6 +775,9 @@ def setup_synchronization(debug: bool = False) -> Tuple[UserSynchronizer, str]:
     config = TimeCampConfig.from_env()
     logger.debug(f"Using API key: {config.api_key[:4]}...{config.api_key[-4:]}")
     logger.debug(f"Using supervisor-based groups: {config.use_supervisor_groups}")
+    logger.debug(f"Using department-based groups: {config.use_department_groups}")
+    if config.use_supervisor_groups and config.use_department_groups:
+        logger.debug("Hybrid mode enabled: creating department groups with supervisor subgroups")
     logger.debug(f"Disable new users creation: {config.disable_new_users}")
     logger.debug(f"Disable external ID sync: {config.disable_external_id_sync}")
     logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
@@ -810,6 +813,10 @@ def parse_arguments() -> argparse.Namespace:
                       help="Simulate actions without making changes to TimeCamp")
     parser.add_argument("--debug", action="store_true", 
                       help="Enable debug logging to see detailed information about API calls and processing")
+    parser.add_argument("--show-structure", action="store_true",
+                      help="Display the group structure that would be created without performing sync")
+    parser.add_argument("--detailed", action="store_true",
+                      help="Show detailed user breakdown (use with --show-structure)")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -819,6 +826,16 @@ if __name__ == "__main__":
     # Set up logger with debug flag
     logger = setup_logger('timecamp_sync', args.debug)
     
-    logger.info("Starting synchronization")
-    logger.info("BY DEFAULT IF ACCOUNT DON'T HAVE ENOUGHT PAID SEATS, THEY WILL BE ADDED AUTOMATICALLY")
-    sync_users(dry_run=args.dry_run, debug=args.debug) 
+    if args.show_structure:
+        # Show structure preview instead of performing sync
+        from src.structure_display import show_structure
+        
+        config = TimeCampConfig.from_env()
+        users_file = get_users_file()
+        
+        show_structure(config, users_file, detailed=args.detailed)
+    else:
+        # Perform normal synchronization
+        logger.info("Starting synchronization")
+        logger.info("BY DEFAULT IF ACCOUNT DON'T HAVE ENOUGHT PAID SEATS, THEY WILL BE ADDED AUTOMATICALLY")
+        sync_users(dry_run=args.dry_run, debug=args.debug) 

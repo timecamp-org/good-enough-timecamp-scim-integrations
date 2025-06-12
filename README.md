@@ -41,6 +41,7 @@ graph TD
 - `TIMECAMP_DISABLE_EXTERNAL_ID_SYNC=true` - Don't sync external IDs for users
 - `TIMECAMP_DISABLE_MANUAL_USER_UPDATES=true` - Skip any updates for users with the `added_manually=1` setting flag
 - `TIMECAMP_USE_SUPERVISOR_GROUPS=false` - Don't use supervisor-based group structures
+- `TIMECAMP_USE_JOB_TITLE_NAME=true` - Use job title in user names with format "job_title [name]" when available. Also affects supervisor group names when supervisor groups are enabled.
 
 ## LDAP
 

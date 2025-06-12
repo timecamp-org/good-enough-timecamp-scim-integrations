@@ -172,6 +172,7 @@ def create_user_object(user_attrs, manager_id, department, config):
         "name": normalize_text(user_attrs.get('displayName', '')),
         "email": user_attrs.get('mail', '').lower(),
         "department": department,
+        "job_title": normalize_text(user_attrs.get('title', '')),
         "status": "active",
         "supervisor_id": manager_id,
     }

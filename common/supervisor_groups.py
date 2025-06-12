@@ -3,29 +3,38 @@ from typing import Dict, List, Any, Set, Tuple, Optional
 
 logger = logging.getLogger('timecamp_sync')
 
-def prepare_user_data(user_data: Dict[str, Any], show_external_id: bool) -> Dict[str, Any]:
+def prepare_user_data(user_data: Dict[str, Any], show_external_id: bool, use_job_title_name: bool = False) -> Dict[str, Any]:
     """Clean and prepare user data for processing."""
     from common.utils import clean_name
     
     user = user_data.copy()
+    
+    # Format name based on configuration
+    base_name = user['name']
+    
+    # Use job title in name format if enabled and available
+    if use_job_title_name and user.get('job_title'):
+        base_name = f"{user['job_title']} [{user['name']}]"
+    
+    # Apply external_id if configured
     user['name'] = clean_name(
-        f"{user['name']} - {user['external_id']}" 
+        f"{base_name} - {user['external_id']}" 
         if show_external_id and user.get('external_id') 
-        else user['name']
+        else base_name
     )
     # Ensure email is lowercase
     if 'email' in user:
         user['email'] = user['email'].lower()
     return user
 
-def collect_users_and_supervisors(source_data: Dict[str, Any], show_external_id: bool) -> Tuple[Dict[str, Dict[str, Any]], Set[str]]:
+def collect_users_and_supervisors(source_data: Dict[str, Any], config) -> Tuple[Dict[str, Dict[str, Any]], Set[str]]:
     """First pass: collect all users and identify supervisors."""
     users_by_id = {}
     supervisor_ids = set()
     
     for user in source_data['users']:
         # Clean and prepare user data
-        user = prepare_user_data(user, show_external_id)
+        user = prepare_user_data(user, config.show_external_id, config.use_job_title_name)
         
         if 'external_id' in user and user['external_id']:
             users_by_id[user['external_id']] = user
@@ -42,9 +51,8 @@ def build_supervisor_paths(source_data: Dict[str, Any],
     supervisor_paths = {}
     
     # First handle top-level supervisors (those with no supervisor)
-    for user in source_data['users']:
-        user_id = user.get('external_id')
-        if not user_id or user_id not in supervisor_ids:
+    for user_id, user in users_by_id.items():
+        if user_id not in supervisor_ids:
             continue
             
         has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
@@ -56,9 +64,8 @@ def build_supervisor_paths(source_data: Dict[str, Any],
     more_to_process = True
     while more_to_process:
         more_to_process = False
-        for user in source_data['users']:
-            user_id = user.get('external_id')
-            if not user_id or user_id not in supervisor_ids or user_id in supervisor_paths:
+        for user_id, user in users_by_id.items():
+            if user_id not in supervisor_ids or user_id in supervisor_paths:
                 continue
                 
             supervisor_id = user.get('supervisor_id')
@@ -68,7 +75,7 @@ def build_supervisor_paths(source_data: Dict[str, Any],
             if supervisor_id in supervisor_paths:
                 # Supervisor's supervisor is already processed, add this one
                 supervisor_path = supervisor_paths[supervisor_id]
-                supervisor_paths[user_id] = f"{supervisor_path}/{user.get('name')}"
+                supervisor_paths[user_id] = f"{supervisor_path}/{user.get('name', '')}"
                 more_to_process = True
     
     return supervisor_paths
@@ -172,21 +179,21 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
     Examples of resulting group structure:
     
     Input data:
-    - John Doe (external_id: 123, department: "Engineering", supervisor_id: "")
-    - Jane Smith (external_id: 124, department: "Engineering/Frontend", supervisor_id: "123")
-    - Bob Wilson (external_id: 125, department: "Sales/EMEA", supervisor_id: "")
-    - Alice Johnson (external_id: 126, department: "Sales/EMEA", supervisor_id: "125")
+    - John Doe (external_id: 123, department: "Engineering", job_title: "Engineering Manager", supervisor_id: "")
+    - Jane Smith (external_id: 124, department: "Engineering/Frontend", job_title: "Frontend Developer", supervisor_id: "123")
+    - Bob Wilson (external_id: 125, department: "Sales/EMEA", job_title: "Sales Manager", supervisor_id: "")
+    - Alice Johnson (external_id: 126, department: "Sales/EMEA", job_title: "Sales Rep", supervisor_id: "125")
     
-    With hybrid mode (both TIMECAMP_USE_SUPERVISOR_GROUPS=true and TIMECAMP_USE_DEPARTMENT_GROUPS=true):
-    - John Doe → "Engineering/John Doe" (supervisor gets their own subgroup)
-    - Jane Smith → "Engineering/Frontend/John Doe" (user assigned to supervisor's subgroup within their department)
-    - Bob Wilson → "Sales/EMEA/Bob Wilson" (supervisor gets their own subgroup)
-    - Alice Johnson → "Sales/EMEA/Bob Wilson" (user assigned to supervisor's subgroup)
+    With hybrid mode and job titles enabled (TIMECAMP_USE_SUPERVISOR_GROUPS=true, TIMECAMP_USE_DEPARTMENT_GROUPS=true, TIMECAMP_USE_JOB_TITLE_NAME=true):
+    - John Doe → "Engineering/Engineering Manager [John Doe]" (supervisor gets their own subgroup)
+    - Jane Smith → "Engineering/Frontend/Engineering Manager [John Doe]" (user assigned to supervisor's subgroup within their department)
+    - Bob Wilson → "Sales/EMEA/Sales Manager [Bob Wilson]" (supervisor gets their own subgroup)
+    - Alice Johnson → "Sales/EMEA/Sales Manager [Bob Wilson]" (user assigned to supervisor's subgroup)
     
     This creates TimeCamp groups:
-    - Engineering/John Doe
-    - Engineering/Frontend/John Doe  
-    - Sales/EMEA/Bob Wilson
+    - Engineering/Engineering Manager [John Doe]
+    - Engineering/Frontend/Engineering Manager [John Doe]  
+    - Sales/EMEA/Sales Manager [Bob Wilson]
     
     Args:
         source_data: The source data containing users information
@@ -243,7 +250,7 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
                 supervisor_id = user.get('supervisor_id')
                 supervisor = users_by_id.get(supervisor_id)
                 if supervisor:
-                    supervisor_name = supervisor.get('name', '').split(' - ')[0]  # Remove external_id suffix if present
+                    supervisor_name = supervisor.get('name', '')  # Use full formatted name including job title
                     user['department'] = f"{original_department}/{supervisor_name}"
                     logger.debug(f"User {user.get('name')} assigned to hybrid group: {user['department']}")
                 else:
@@ -297,7 +304,7 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
         - A set of department paths to be created
     """
     # First pass: collect users and identify supervisors
-    users_by_id, supervisor_ids = collect_users_and_supervisors(source_data, config.show_external_id)
+    users_by_id, supervisor_ids = collect_users_and_supervisors(source_data, config)
     
     department_paths = set()
     
@@ -326,6 +333,12 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
     else:
         # Traditional department-based structure
         logger.debug("Using traditional department-based structure")
+        # Still process users to get formatted names and set up emails correctly
+        for user in source_data['users']:
+            user = prepare_user_data(user, config.show_external_id, config.use_job_title_name)
+            if 'external_id' in user and user['external_id']:
+                users_by_id[user['external_id']] = user
         department_paths = assign_departments_standard(source_data, config)
 
-    return {user['email'].lower(): user for user in source_data['users']}, department_paths 
+    # Return processed users by email instead of original source data
+    return {user['email'].lower(): user for user in users_by_id.values()}, department_paths 

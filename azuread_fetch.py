@@ -405,6 +405,7 @@ def fetch_azure_users():
                     "name": display_name,
                     "email": email.lower(),
                     "department": normalize_text(user.get('department', '')),
+                    "job_title": normalize_text(user.get('jobTitle', '')),
                     "status": "active",  # Graph API doesn't directly expose this in the same way
                     "supervisor_id": manager_id,
                 }

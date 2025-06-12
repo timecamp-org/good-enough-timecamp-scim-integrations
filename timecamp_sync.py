@@ -781,6 +781,7 @@ def setup_synchronization(debug: bool = False) -> Tuple[UserSynchronizer, str]:
     logger.debug(f"Disable new users creation: {config.disable_new_users}")
     logger.debug(f"Disable external ID sync: {config.disable_external_id_sync}")
     logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
+    logger.debug(f"Use job title in user names: {config.use_job_title_name}")
     
     # Initialize API and synchronizer
     timecamp = TimeCampAPI(config)

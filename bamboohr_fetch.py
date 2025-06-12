@@ -65,6 +65,7 @@ def fetch_bamboo_users():
             "email",
             "jobInformationDepartment",
             "jobInformationDivision",
+            "jobInformationJobTitle",
             "isSupervisor",
             "supervisorId",
             "employmentStatus",
@@ -131,6 +132,7 @@ def fetch_bamboo_users():
             
             user = {
                 "external_id": emp.get('employeeNumber'),
+                "job_title": emp.get('jobInformationJobTitle'),
                 "name": emp.get('name', '').strip(),
                 "email": emp.get('email').replace('@', '@test-'),
                 "department": combined_department,

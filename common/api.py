@@ -123,6 +123,10 @@ class TimeCampAPI:
         results = self.get_user_settings(user_ids, 'added_manually', batch_size)
         # Convert 'added_manually' values to boolean values
         return {user_id: str(value) == '1' for user_id, value in results.items()}
+    
+    def get_external_ids(self, user_ids: List[int], batch_size: int = 200) -> Dict[int, Optional[str]]:
+        """Get external_id settings for multiple users in bulk."""
+        return self.get_user_settings(user_ids, 'external_id', batch_size)
 
     def are_users_enabled(self, user_ids: List[int], batch_size: int = 200) -> Dict[int, bool]:
         """Check if multiple users are enabled in bulk."""
@@ -229,3 +233,7 @@ class TimeCampAPI:
         """Fetch the list of day types from TimeCamp API."""
         response = self._make_request('GET', "attendance/day_types")
         return response.json().get('data', [])
+    
+    def delete_group(self, group_id: int) -> None:
+        """Delete a group from TimeCamp."""
+        self._make_request('DELETE', f"group/{group_id}")

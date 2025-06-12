@@ -103,8 +103,6 @@ def main():
                       help="Enable debug logging")
     parser.add_argument("--output", default="timecamp_users.json",
                       help="Output file name (default: timecamp_users.json)")
-    parser.add_argument("--pretty", action="store_true",
-                      help="Pretty print the JSON output")
     
     args = parser.parse_args()
     
@@ -179,10 +177,7 @@ def main():
         
         # Write output
         with open(args.output, 'w') as f:
-            if args.pretty:
-                json.dump(timecamp_users, f, indent=2, ensure_ascii=False)
-            else:
-                json.dump(timecamp_users, f, ensure_ascii=False)
+            json.dump(timecamp_users, f, indent=2, ensure_ascii=False)
         
         logger.info(f"Successfully wrote TimeCamp data to: {args.output}")
         

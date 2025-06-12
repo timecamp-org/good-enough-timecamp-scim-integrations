@@ -247,7 +247,7 @@ class TimeCampSynchronizer:
         
         # Skip manually added users if configured
         if self.config.disable_manual_user_updates and manually_added.get(user_id, False):
-            logger.debug(f"Skipping updates for manually added user: {email} (ID: {user_id})")
+            logger.info(f"Skipping updates for manually added user: {email} (ID: {user_id}) due to disable_manual_user_updates config.")
             return
         
         updates = {}
@@ -363,6 +363,7 @@ class TimeCampSynchronizer:
             
             # Skip manually added users if configured
             if self.config.disable_manual_user_updates and manually_added.get(user_id, False):
+                logger.info(f"Skipping deactivation for manually added user: {email} (ID: {user_id}) due to disable_manual_user_updates config.")
                 continue
             
             # Skip if already processed (matched by additional email)

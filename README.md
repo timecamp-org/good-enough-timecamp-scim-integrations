@@ -2,6 +2,17 @@
 
 **⚠️ IMPORTANT: BY DEFAULT IF ACCOUNT DOESN'T HAVE ENOUGH PAID SEATS IN SAAS, THEY WILL BE INCREASED AUTOMATICALLY**
 
+1. Get row data from SCIM system 
+   `python bamboohr_fetch.py`
+2. Transform row data into TimeCamp json structure 
+   `python3 prepare_timecamp_data.py && ./display_timecamp_tree.py > structure.txt`
+3. Use TimeCamp structure to synchronise with our API
+   `python timecamp_sync_v2.py`
+4. Cleanup empty groups
+   `python remove_empty_groups.py`
+
+=====
+
 Scripts to synchronize users from various HR systems with TimeCamp. Currently supports:
 - BambooHR
 - Azure AD / Microsoft Entra ID

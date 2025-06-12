@@ -8,6 +8,133 @@ from common.logger import setup_logger
 
 logger = setup_logger()
 
+# Cache for not-found employee IDs to avoid repeated requests
+NOT_FOUND_EMPLOYEES_CACHE = set()
+
+def fetch_employees_by_ids(subdomain, headers, employee_ids):
+    """Fetch multiple employees by their IDs using the dataset endpoint."""
+    if not employee_ids:
+        return []
+    
+    try:
+        url = f'https://api.bamboohr.com/api/gateway.php/{subdomain}/v1/datasets/employee'
+        
+        # Prepare fields - same as main fetch
+        fields = [
+            "employeeNumber",
+            "name",
+            "email",
+            "jobInformationDepartment",
+            "jobInformationDivision",
+            "jobInformationJobTitle",
+            "isSupervisor",
+            "supervisorId",
+            "employmentStatus",
+            "hireDate",
+            "status",
+            "supervisorEid"
+        ]
+        
+        # Create individual equal filters for each employee ID
+        employee_filters = []
+        for emp_id in employee_ids:
+            employee_filters.append({
+                "field": "employeeNumber",
+                "operator": "equal",
+                "value": str(emp_id)
+            })
+        
+        # Create filter with "any" match for multiple employee IDs
+        payload = {
+            "filters": {
+                "match": "any",
+                "filters": employee_filters
+            },
+            "fields": fields
+        }
+        
+        logger.info(f"Fetching {len(employee_ids)} employees by ID...")
+        
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        data = response.json()
+        return data.get('data', [])
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching employees by IDs: {str(e)}")
+        return []
+
+def fetch_missing_supervisors(subdomain, headers, users, excluded_departments):
+    """Recursively fetch supervisors that are not in the current user set."""
+    global NOT_FOUND_EMPLOYEES_CACHE
+    
+    # Create a set of existing employee IDs
+    existing_ids = {user['external_id'] for user in users if user.get('external_id')}
+    
+    # Create a set of all supervisor IDs mentioned
+    supervisor_ids = {user.get('supervisor_id') for user in users if user.get('supervisor_id')}
+    
+    # Find missing supervisor IDs (excluding ones we already know don't exist)
+    missing_supervisor_ids = (supervisor_ids - existing_ids) - NOT_FOUND_EMPLOYEES_CACHE
+    
+    if not missing_supervisor_ids:
+        return []
+    
+    logger.info(f"Found {len(missing_supervisor_ids)} missing supervisors, fetching...")
+    
+    # Fetch all missing supervisors in batch
+    employees_data = fetch_employees_by_ids(subdomain, headers, missing_supervisor_ids)
+    
+    # Create a set of found employee IDs
+    found_employee_ids = {emp.get('employeeNumber') for emp in employees_data if emp.get('employeeNumber')}
+    
+    # Update cache with not-found employees
+    not_found_ids = missing_supervisor_ids - found_employee_ids
+    if not_found_ids:
+        NOT_FOUND_EMPLOYEES_CACHE.update(not_found_ids)
+        logger.warning(f"Could not find {len(not_found_ids)} employee(s): {', '.join(not_found_ids)}")
+    
+    inactive_supervisors = []
+    new_missing_ids = set()
+    
+    for emp in employees_data:
+        # Transform to our schema
+        division = emp.get('jobInformationDivision', '')
+        department = emp.get('jobInformationDepartment', '')
+        combined_department = f"{division}/{department}" if department and division else department or division or ''
+        
+        user = {
+            "external_id": emp.get('employeeNumber'),
+            "job_title": emp.get('jobInformationJobTitle'),
+            "name": emp.get('name', '').strip(),
+            "email": emp.get('email', '').replace('@', '@test-') if emp.get('email') else '',
+            "department": combined_department,
+            "status": "inactive",  # Mark as inactive since they weren't in the active set
+            "supervisor_id": emp.get('supervisorId', ''),
+        }
+        
+        inactive_supervisors.append(user)
+        
+        # Check if this supervisor has a supervisor
+        if user.get('supervisor_id') and user['supervisor_id'] not in existing_ids:
+            new_missing_ids.add(user['supervisor_id'])
+    
+    # Update existing IDs with the new supervisors we just fetched
+    existing_ids.update(user['external_id'] for user in inactive_supervisors if user.get('external_id'))
+    
+    # Recursively fetch the next level of supervisors if needed
+    if new_missing_ids:
+        # Remove already processed IDs and cached not-found IDs
+        new_missing_ids = (new_missing_ids - existing_ids) - NOT_FOUND_EMPLOYEES_CACHE
+        if new_missing_ids:
+            # Temporarily add inactive supervisors to the list for the recursive call
+            temp_users = users + inactive_supervisors
+            next_level_supervisors = fetch_missing_supervisors(subdomain, headers, temp_users, excluded_departments)
+            inactive_supervisors.extend(next_level_supervisors)
+    
+    return inactive_supervisors
+
 def fetch_bamboo_users():
     """Fetch active users from BambooHR and save them to a JSON file."""
     try:
@@ -70,7 +197,8 @@ def fetch_bamboo_users():
             "supervisorId",
             "employmentStatus",
             "hireDate",
-            "status"
+            "status",
+            "supervisorEid"
         ]
         
         # Prepare request payload
@@ -141,6 +269,14 @@ def fetch_bamboo_users():
             }
             users.append(user)
         
+        # Fetch missing supervisors recursively
+        logger.info("Checking for missing supervisors in the hierarchy...")
+        inactive_supervisors = fetch_missing_supervisors(subdomain, headers, users, excluded_departments)
+        
+        if inactive_supervisors:
+            logger.info(f"Found {len(inactive_supervisors)} inactive supervisors to complete the hierarchy")
+            users.extend(inactive_supervisors)
+        
         # Prepare output data
         output_data = {"users": users}
         
@@ -148,7 +284,7 @@ def fetch_bamboo_users():
         with open("users.json", 'w') as f:
             json.dump(output_data, f, indent=2)
         
-        logger.info(f"Successfully saved {len(users)} users to users.json")
+        logger.info(f"Successfully saved {len(users)} users to users.json ({len(users) - len(inactive_supervisors)} active, {len(inactive_supervisors)} inactive supervisors)")
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching BambooHR users: {str(e)}")

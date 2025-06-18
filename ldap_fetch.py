@@ -52,6 +52,7 @@ def get_ldap_config():
         'use_samaccountname': os.getenv('LDAP_USE_SAMACCOUNTNAME', 'false').lower() == 'true',
         'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true',
         'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true',
+        'use_real_email_as_email': os.getenv('LDAP_USE_REAL_EMAIL_AS_EMAIL', 'false').lower() == 'true',
         'use_ssl': os.getenv('LDAP_USE_SSL', 'false').lower() == 'true',
         'use_start_tls': os.getenv('LDAP_USE_START_TLS', 'false').lower() == 'true',
         'ssl_verify': os.getenv('LDAP_SSL_VERIFY', 'true').lower() == 'true'
@@ -251,6 +252,11 @@ def create_user_object(user_attrs, manager_id, department, config):
         # Always store original mail as real_email if available
         if original_mail:
             transformed_user["real_email"] = original_mail
+    
+    # If configured to use real_email as email, swap them and clear real_email
+    if config['use_real_email_as_email'] and transformed_user.get('real_email'):
+        transformed_user["email"] = transformed_user["real_email"]
+        transformed_user["real_email"] = ""
     
     return transformed_user
 

@@ -1,13 +1,5 @@
 [
   {
-    "timecamp_external_id": "115",
-    "timecamp_user_name": "Access administration Team Lead [Oleksandr Budonnyi]",
-    "timecamp_email": "aleksandr.b@test-brainrocket.com",
-    "timecamp_groups_breadcrumb": "R&D/Information Security",
-    "timecamp_status": "active",
-    "timecamp_role": "user"
-  },
-  {
     "timecamp_external_id": "97",
     "timecamp_user_name": "Senior Developer [Jane Smith]",
     "timecamp_email": "jane.smith@example.com",

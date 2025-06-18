@@ -94,18 +94,6 @@ Options:
 - `--debug` - Enable debug logging
 - `--output <filename>` - Specify output file (default: timecamp_users.json)
 - `--pretty` - Pretty print the JSON output
-
-Example output structure:
-```json
-[{
-    "timecamp_external_id": "115",
-    "timecamp_user_name": "Access administration Team Lead [Oleksandr Budonnyi]",
-    "timecamp_email": "aleksandr.b@test-brainrocket.com",
-    "timecamp_groups_breadcrumb": "R&D/Information Security",
-    "timecamp_status": "active",
-    "timecamp_role": "user",
-    "timecamp_real_email": "real.email@example.com"
-}]
 ```
 
 ### Stage 2: TimeCamp Synchronization

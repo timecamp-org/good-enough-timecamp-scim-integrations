@@ -53,6 +53,8 @@ def get_ldap_config():
         'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true',
         'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true',
         'use_real_email_as_email': os.getenv('LDAP_USE_REAL_EMAIL_AS_EMAIL', 'false').lower() == 'true',
+        'use_windows_login_email': os.getenv('LDAP_USE_WINDOWS_LOGIN_EMAIL', 'false').lower() == 'true',
+        'email_domain': os.getenv('LDAP_EMAIL_DOMAIN', ''),
         'use_ssl': os.getenv('LDAP_USE_SSL', 'false').lower() == 'true',
         'use_start_tls': os.getenv('LDAP_USE_START_TLS', 'false').lower() == 'true',
         'ssl_verify': os.getenv('LDAP_SSL_VERIFY', 'true').lower() == 'true'
@@ -239,7 +241,15 @@ def create_user_object(user_attrs, manager_id, department, config):
     # Handle email generation based on configuration
     original_mail = user_attrs.get('mail', '').lower()
     
-    if config['use_samaccountname']:
+    if config['use_windows_login_email']:
+        # Use Windows login (sAMAccountName) with specified or LDAP domain
+        if user_attrs.get('sAMAccountName'):
+            email_domain = config['email_domain'] if config['email_domain'] else config['domain']
+            transformed_user["email"] = f"{user_attrs['sAMAccountName']}@{email_domain}".lower()
+            # Always store original mail as real_email if available
+            if original_mail:
+                transformed_user["real_email"] = original_mail
+    elif config['use_samaccountname']:
         # Prioritize sAMAccountName for email
         if user_attrs.get('sAMAccountName'):
             transformed_user["email"] = f"{user_attrs['sAMAccountName']}@{config['domain']}".lower()

@@ -80,6 +80,12 @@ def connect_to_ldap(config):
     """Connect to LDAP server and return connection object."""
     logger.info(f"Connecting to LDAP server {config['host']}:{config['port']}")
     
+    # Globally configure SSL/TLS verification before initializing
+    # This is often required for python-ldap to behave like command-line tools
+    if (config['use_ssl'] or config['use_start_tls']) and not config['ssl_verify']:
+        ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+        logger.warning("Globally disabled SSL certificate verification.")
+    
     # Determine the protocol and port
     if config['use_ssl']:
         protocol = "ldaps"
@@ -106,15 +112,11 @@ def connect_to_ldap(config):
     ldap_connection.set_option(ldap.OPT_SIZELIMIT, 0)  # No client-side size limit
     ldap_connection.set_option(ldap.OPT_TIMELIMIT, 0)  # No client-side time limit
     
-    # Configure SSL/TLS verification
-    if config['use_ssl'] or config['use_start_tls']:
-        if not config['ssl_verify']:
-            # Disable certificate verification if requested
-            ldap_connection.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
-            logger.warning("SSL certificate verification disabled")
-        else:
-            ldap_connection.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_DEMAND)
-    
+    # The global option above should be sufficient, but we can also set it on the
+    # connection object just in case, for older versions of python-ldap.
+    if (config['use_ssl'] or config['use_start_tls']) and not config['ssl_verify']:
+        ldap_connection.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+
     # Use StartTLS if configured
     if config['use_start_tls']:
         try:

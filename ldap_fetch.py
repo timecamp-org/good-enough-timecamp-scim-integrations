@@ -51,8 +51,17 @@ def get_ldap_config():
         'page_size': int(os.getenv('LDAP_PAGE_SIZE', '1000')),
         'use_samaccountname': os.getenv('LDAP_USE_SAMACCOUNTNAME', 'false').lower() == 'true',
         'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true',
-        'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true'
+        'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true',
+        'use_ssl': os.getenv('LDAP_USE_SSL', 'false').lower() == 'true',
+        'use_start_tls': os.getenv('LDAP_USE_START_TLS', 'false').lower() == 'true',
+        'ssl_verify': os.getenv('LDAP_SSL_VERIFY', 'true').lower() == 'true'
     }
+    
+    # Auto-detect SSL settings based on port if not explicitly set
+    if not os.getenv('LDAP_USE_SSL') and not os.getenv('LDAP_USE_START_TLS'):
+        if config['port'] == '636':
+            config['use_ssl'] = True
+            logger.info("Auto-detected SSL based on port 636")
     
     # Validate required configuration
     required_fields = ['host', 'domain', 'dn', 'username', 'password']
@@ -61,14 +70,32 @@ def get_ldap_config():
     if missing_fields:
         raise ValueError(f"Missing required LDAP configuration: {', '.join(missing_fields)}")
     
+    # Validate SSL configuration
+    if config['use_ssl'] and config['use_start_tls']:
+        raise ValueError("Cannot use both LDAP_USE_SSL and LDAP_USE_START_TLS simultaneously")
+    
     return config
 
 def connect_to_ldap(config):
     """Connect to LDAP server and return connection object."""
     logger.info(f"Connecting to LDAP server {config['host']}:{config['port']}")
     
+    # Determine the protocol and port
+    if config['use_ssl']:
+        protocol = "ldaps"
+        # Default to 636 for SSL if port is still 389
+        port = '636' if config['port'] == '389' else config['port']
+        logger.info("Using LDAPS (SSL) connection")
+    else:
+        protocol = "ldap"
+        port = config['port']
+        if config['use_start_tls']:
+            logger.info("Using LDAP with StartTLS")
+        else:
+            logger.info("Using plain LDAP connection")
+    
     # Connect to LDAP server
-    ldap_uri = f"ldap://{config['host']}:{config['port']}"
+    ldap_uri = f"{protocol}://{config['host']}:{port}"
     ldap_connection = ldap.initialize(ldap_uri)
     ldap_connection.protocol_version = ldap.VERSION3
     
@@ -79,12 +106,34 @@ def connect_to_ldap(config):
     ldap_connection.set_option(ldap.OPT_SIZELIMIT, 0)  # No client-side size limit
     ldap_connection.set_option(ldap.OPT_TIMELIMIT, 0)  # No client-side time limit
     
+    # Configure SSL/TLS verification
+    if config['use_ssl'] or config['use_start_tls']:
+        if not config['ssl_verify']:
+            # Disable certificate verification if requested
+            ldap_connection.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
+            logger.warning("SSL certificate verification disabled")
+        else:
+            ldap_connection.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_DEMAND)
+    
+    # Use StartTLS if configured
+    if config['use_start_tls']:
+        try:
+            ldap_connection.start_tls_s()
+            logger.info("StartTLS established successfully")
+        except ldap.LDAPError as e:
+            logger.error(f"StartTLS failed: {str(e)}")
+            raise
+    
     # Construct the bind DN (distinguished name)
     bind_dn = f"{config['username']}@{config['domain']}" if '@' not in config['username'] else config['username']
     
     # Bind to the server
-    ldap_connection.simple_bind_s(bind_dn, config['password'])
-    logger.info("Successfully authenticated with LDAP server")
+    try:
+        ldap_connection.simple_bind_s(bind_dn, config['password'])
+        logger.info("Successfully authenticated with LDAP server")
+    except ldap.LDAPError as e:
+        logger.error(f"LDAP authentication failed: {str(e)}")
+        raise
     
     return ldap_connection
 

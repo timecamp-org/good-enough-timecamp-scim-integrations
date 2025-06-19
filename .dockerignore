@@ -2,7 +2,7 @@
 .git
 .gitignore
 
-# Docker files (except entrypoint script)
+# Docker files
 Dockerfile
 docker-compose.yml
 .dockerignore
@@ -39,3 +39,5 @@ Thumbs.db
 
 # Documentation
 README.md 
+
+samples/*

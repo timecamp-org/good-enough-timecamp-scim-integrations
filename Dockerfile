@@ -20,18 +20,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Copy and make entrypoint script executable
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
 # Create var directory for outputs
 RUN mkdir -p var/logs
 
 # Set environment variable to ensure Python output is not buffered
 ENV PYTHONUNBUFFERED=1
 
-# Set the entrypoint
-ENTRYPOINT ["/docker-entrypoint.sh"]
-
 # Default command
-CMD ["help"] 
+CMD ["python", "--help"] 

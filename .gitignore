@@ -13,3 +13,4 @@ users*.json
 *.txt
 timecamp_users.json
 var/*
+var/

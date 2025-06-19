@@ -5,10 +5,10 @@ services:
     build: .
     container_name: timecamp-scim
     volumes:
-      # Mount var directory for persistent data and logs
       - ./var:/app/var
     environment:
       - PYTHONUNBUFFERED=1
+      - DISABLE_FILE_LOGGING=${DISABLE_FILE_LOGGING:-true}
       # TimeCamp Configuration
       - TIMECAMP_API_KEY=${TIMECAMP_API_KEY}
       - TIMECAMP_DOMAIN=${TIMECAMP_DOMAIN:-app.timecamp.com}
@@ -60,41 +60,41 @@ services:
       - FACTORIAL_API_KEY=${FACTORIAL_API_KEY:-}
       - LeaveTypeMap=${LeaveTypeMap:-}
     # Override the default command - you can specify what to run
-    command: ["fetch-bamboohr"]
+    command: ["python", "fetch_bamboohr.py"]
     
   # Service for running different fetch commands
   fetch-bamboohr:
     extends: timecamp-scim
-    command: ["fetch-bamboohr"]
+    command: ["python", "fetch_bamboohr.py"]
     
   fetch-azuread:
     extends: timecamp-scim
-    command: ["fetch-azuread"]
+    command: ["python", "fetch_azuread.py"]
     
   fetch-ldap:
     extends: timecamp-scim
-    command: ["fetch-ldap"]
+    command: ["python", "fetch_ldap.py"]
     
   fetch-factorial:
     extends: timecamp-scim
-    command: ["fetch-factorial"]
+    command: ["python", "fetch_factorialhr.py"]
     
   prepare-timecamp:
     extends: timecamp-scim
-    command: ["prepare-timecamp"]
+    command: ["python", "prepare_timecamp_json_from_fetch.py"]
     
   sync-users:
     extends: timecamp-scim
-    command: ["sync-users"]
+    command: ["python", "timecamp_sync_users.py"]
     
   sync-time-off:
     extends: timecamp-scim
-    command: ["sync-time-off"]
+    command: ["python", "timecamp_sync_time_off.py"]
     
   display-tree:
     extends: timecamp-scim
-    command: ["display-tree"]
+    command: ["python", "scripts/display_timecamp_tree.py", "--file", "var/timecamp_users.json"]
     
   remove-empty-groups:
     extends: timecamp-scim
-    command: ["remove-empty-groups"] 
+    command: ["python", "scripts/remove_empty_groups.py"] 

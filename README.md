@@ -136,147 +136,28 @@ AZURE_PREFER_REAL_EMAIL=true
 
 For easy deployment and consistent environments, you can run the application using Docker.
 
-### Prerequisites
-
-- Docker and Docker Compose installed on your system
-- Environment variables configured (see `samples/env.example` for reference)
-
-### Quick Start with Docker
-
-1. **Set up environment variables:**
-   
-   **Option A: Using .env file (recommended for docker-compose)**
-   ```bash
-   # Copy the sample env file and configure it
-   cp samples/env.example .env
-   # Edit .env with your actual configuration values
-   # Docker Compose will automatically load variables from .env
-   ```
-   
-   **Option B: Export environment variables directly**
-   ```bash
-   export TIMECAMP_API_KEY=your_api_key
-   export TIMECAMP_ROOT_GROUP_ID=your_root_group_id
-   export BAMBOOHR_SUBDOMAIN=your_subdomain
-   export BAMBOOHR_API_KEY=your_api_key
-   # ... add other variables as needed
-   ```
-
-   > **Note**: All environment variables from `samples/env.example` are supported. The Docker Compose configuration includes sensible defaults for optional settings.
-
-2. **Build the Docker image:**
-   ```bash
-   docker-compose build
-   ```
-
-3. **Run specific commands using predefined services:**
-   ```bash
-   # Fetch users from BambooHR
-   docker-compose run --rm fetch-bamboohr
-   
-   # Fetch users from Azure AD
-   docker-compose run --rm fetch-azuread
-   
-   # Fetch users from LDAP
-   docker-compose run --rm fetch-ldap
-   
-   # Fetch vacation data from FactorialHR
-   docker-compose run --rm fetch-factorial
-   
-   # Prepare TimeCamp data
-   docker-compose run --rm prepare-timecamp
-   
-   # Sync users with TimeCamp
-   docker-compose run --rm sync-users
-   
-   # Display TimeCamp tree structure
-   docker-compose run --rm display-tree
-   
-   # Remove empty groups
-   docker-compose run --rm remove-empty-groups
-   ```
-
-4. **Run the complete workflow:**
-   ```bash
-   # Example: Complete BambooHR sync workflow
-   docker-compose run --rm fetch-bamboohr
-   docker-compose run --rm prepare-timecamp
-   docker-compose run --rm sync-users
-   docker-compose run --rm remove-empty-groups
-   ```
-
-5. **Run custom commands:**
-   ```bash
-   # Run any script with custom arguments
-   docker-compose run --rm timecamp-scim python timecamp_sync_users.py --dry-run --debug
-   
-   # Or use the convenience commands with flags
-   docker-compose run --rm timecamp-scim sync-users --dry-run --debug
-   ```
-
-### Alternative: Direct Docker Commands
-
-You can also run the container directly without docker-compose by passing environment variables:
-
 ```bash
-# Build the image
-docker build -t timecamp-scim .
+docker-compose build
 
-# Run commands with environment variables
-docker run --rm \
-  -e TIMECAMP_API_KEY=your_api_key \
-  -e TIMECAMP_ROOT_GROUP_ID=your_root_group_id \
-  -e BAMBOOHR_SUBDOMAIN=your_subdomain \
-  -e BAMBOOHR_API_KEY=your_api_key \
-  -v ./var:/app/var \
-  timecamp-scim fetch-bamboohr
+# Run specific commands using predefined services:
 
-# For production, use an env file
-docker run --rm \
-  --env-file .env \
-  -v ./var:/app/var \
-  timecamp-scim sync-users --dry-run
+docker compose run --rm fetch-bamboohr
+docker compose run --rm fetch-azuread
+docker compose run --rm fetch-ldap
+docker compose run --rm fetch-factorial
 
-# See all available commands
-docker run --rm timecamp-scim help
+docker compose run --rm prepare-timecamp
+
+docker compose run --rm sync-users
+
+docker compose run --rm display-tree # (optional)
+docker compose run --rm remove-empty-groups # (optional)
+
+# Run any script with custom arguments (optionl)
+docker compose run --rm timecamp-scim python timecamp_sync_users.py --dry-run --debug
+docker compose run --rm sync-users --dry-run
+docker compose run --rm sync-users --debug
 ```
-
-### Docker Compose Services
-
-The following services are available:
-
-- `fetch-bamboohr` - Fetch users from BambooHR
-- `fetch-azuread` - Fetch users from Azure AD/Entra ID
-- `fetch-ldap` - Fetch users from LDAP
-- `fetch-factorial` - Fetch vacation data from FactorialHR
-- `prepare-timecamp` - Transform fetched data for TimeCamp
-- `sync-users` - Synchronize users with TimeCamp
-- `sync-time-off` - Synchronize time-off data with TimeCamp
-- `display-tree` - Display TimeCamp group structure
-- `remove-empty-groups` - Clean up empty groups
-
-### Environment Variables & Volumes
-
-- **Configuration**: Environment variables are passed directly to the container (more secure and Docker-native)
-- **Data persistence**: The `var/` directory is mounted to persist logs and output files
-
-### Docker Environment
-
-The Docker container includes all necessary dependencies including:
-- Python 3.11
-- LDAP development libraries
-- All Python packages from `requirements.txt`
-
-### Production Deployment
-
-For production deployments, you can:
-
-- **Use with Kubernetes**: Pass environment variables via ConfigMaps and Secrets
-- **Use with Docker Swarm**: Set environment variables in your stack file
-- **Use with CI/CD**: Set environment variables in your pipeline configuration
-- **Use with container orchestrators**: All major platforms support environment variable injection
-
-The environment-based configuration makes the container truly portable across any Docker-compatible platform.
 
 ## License
 

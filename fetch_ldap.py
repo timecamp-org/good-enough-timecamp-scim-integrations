@@ -431,10 +431,10 @@ def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache
 def save_users_to_file(users):
     """Save users to JSON file."""
     users_output = {"users": users}
-    with open("users.json", 'w', encoding='utf-8') as f:
+    with open("var/users.json", 'w', encoding='utf-8') as f:
         json.dump(users_output, f, indent=2, ensure_ascii=False)
     
-    logger.info(f"Successfully saved {len(users)} users to users.json")
+    logger.info(f"Successfully saved {len(users)} users to var/users.json")
 
 def fetch_ldap_users():
     """Fetch users from LDAP server and save them to JSON file."""

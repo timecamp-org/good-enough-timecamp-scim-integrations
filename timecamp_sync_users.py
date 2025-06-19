@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Stage 2: TimeCamp Synchronization (Version 2)
-This script reads the prepared timecamp_users.json and synchronizes
+This script reads the prepared var/timecamp_users.json and synchronizes
 users and groups with TimeCamp API.
 """
 
@@ -461,8 +461,8 @@ def main():
                       help="Simulate actions without making changes")
     parser.add_argument("--debug", action="store_true",
                       help="Enable debug logging")
-    parser.add_argument("--input", default="timecamp_users.json",
-                      help="Input file name (default: timecamp_users.json)")
+    parser.add_argument("--input", default="var/timecamp_users.json",
+                      help="Input file name (default: var/timecamp_users.json)")
     
     args = parser.parse_args()
     

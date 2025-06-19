@@ -280,11 +280,11 @@ def fetch_bamboo_users():
         # Prepare output data
         output_data = {"users": users}
         
-        # Save to file in main directory
-        with open("users.json", 'w') as f:
+        # Save to file in var directory
+        with open("var/users.json", 'w') as f:
             json.dump(output_data, f, indent=2)
         
-        logger.info(f"Successfully saved {len(users)} users to users.json ({len(users) - len(inactive_supervisors)} active, {len(inactive_supervisors)} inactive supervisors)")
+        logger.info(f"Successfully saved {len(users)} users to var/users.json ({len(users) - len(inactive_supervisors)} active, {len(inactive_supervisors)} inactive supervisors)")
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching BambooHR users: {str(e)}")

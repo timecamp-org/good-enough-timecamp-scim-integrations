@@ -421,10 +421,10 @@ def fetch_azure_users():
         
         # Save users to file with proper encoding for Polish characters
         users_output = {"users": users}
-        with open("users.json", 'w', encoding='utf-8') as f:
+        with open("var/users.json", 'w', encoding='utf-8') as f:
             json.dump(users_output, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Successfully saved {len(users)} users to users.json")
+        logger.info(f"Successfully saved {len(users)} users to var/users.json")
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching from Azure AD Graph API: {str(e)}")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Stage 1: Prepare TimeCamp Data
-This script reads the source users.json and generates timecamp_users.json
+This script reads the source var/users.json and generates var/timecamp_users.json
 with the final structure ready for TimeCamp synchronization.
 """
 
@@ -97,12 +97,12 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
 def main():
     """Main function to prepare TimeCamp data."""
     parser = argparse.ArgumentParser(
-        description="Prepare TimeCamp user data from source users.json"
+        description="Prepare TimeCamp user data from source var/users.json"
     )
     parser.add_argument("--debug", action="store_true", 
                       help="Enable debug logging")
-    parser.add_argument("--output", default="timecamp_users.json",
-                      help="Output file name (default: timecamp_users.json)")
+    parser.add_argument("--output", default="var/timecamp_users.json",
+                      help="Output file name (default: var/timecamp_users.json)")
     
     args = parser.parse_args()
     

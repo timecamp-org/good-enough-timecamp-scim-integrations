@@ -90,9 +90,9 @@ def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't a
 
 def get_users_file() -> str:
     """Get the users JSON file path."""
-    if not os.path.exists("users.json"):
-        raise FileNotFoundError("users.json file not found. Please run the integration script first.")
-    return "users.json"
+    if not os.path.exists("var/users.json"):
+        raise FileNotFoundError("var/users.json file not found. Please run the integration script first.")
+    return "var/users.json"
 
 def clean_department_path(path: Optional[str], config: Optional[TimeCampConfig] = None) -> str:
     """Clean and normalize department path. If config is provided with skip_departments, remove those prefixes."""

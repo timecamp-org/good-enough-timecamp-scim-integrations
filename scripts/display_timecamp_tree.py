@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Display tree structure from timecamp_users.json file.
+Display tree structure from ../var/timecamp_users.json file.
 
-This script reads the timecamp_users.json file and displays the group hierarchy
+This script reads the ../var/timecamp_users.json file and displays the group hierarchy
 as a tree structure with user counts and optional detailed user listings.
 """
 
@@ -141,12 +141,12 @@ def display_tree_structure(users: List[Dict[str, Any]], detailed: bool = False) 
 def main():
     """Main function to run the tree display script."""
     parser = argparse.ArgumentParser(
-        description="Display TimeCamp group structure from timecamp_users.json"
+        description="Display TimeCamp group structure from ../var/timecamp_users.json"
     )
     parser.add_argument(
         "--file", 
-        default="timecamp_users.json",
-        help="Path to the TimeCamp users JSON file (default: timecamp_users.json)"
+        default="../var/timecamp_users.json",
+        help="Path to the TimeCamp users JSON file (default: ../var/timecamp_users.json)"
     )
     parser.add_argument(
         "--detailed", 
@@ -170,7 +170,7 @@ def main():
         
     except FileNotFoundError:
         print(f"❌ Error: File '{args.file}' not found.")
-        print("Make sure timecamp_users.json exists or specify a different file with --file")
+        print("Make sure ../var/timecamp_users.json exists or specify a different file with --file")
     except json.JSONDecodeError as e:
         print(f"❌ Error: Invalid JSON in file: {e}")
     except Exception as e:

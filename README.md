@@ -1,124 +1,52 @@
 # TimeCamp SCIM Integrations
 
-**⚠️ IMPORTANT: BY DEFAULT IF ACCOUNT DOESN'T HAVE ENOUGH PAID SEATS IN SAAS, THEY WILL BE INCREASED AUTOMATICALLY**
-
-1. Get row data from SCIM system 
-   `python bamboohr_fetch.py`
-2. Transform row data into TimeCamp json structure 
-   `python3 prepare_timecamp_data.py && ./display_timecamp_tree.py > structure.txt`
-3. Use TimeCamp structure to synchronise with our API
-   `python timecamp_sync_v2.py`
-4. Cleanup empty groups
-   `python remove_empty_groups.py`
-
-=====
-
 Scripts to synchronize users from various HR systems with TimeCamp. Currently supports:
 - BambooHR
 - Azure AD / Microsoft Entra ID
 - LDAP
+- Factorial
 
-## Setup
+First run:
 
-1. Clone the repository
-2. Install dependencies:
-```bash
-pip3 install -r requirements.txt
-```
-3. Copy `.env.sample` to `.env` and fill in your API keys:
-```bash
-cp .env.sample .env
-```
-
-## System Architecture
-
-### Original One-Stage Process
-
-```mermaid
-graph TD
-    BH[1a: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
-    BH -->|saves| JSON[users.json]
-    AD[1b: Azure/Entra Fetcher] -->|use| GRAPH[Microsoft Graph API]
-    AD -->|saves| JSON
-    LD[1c: LDAP Fetcher] -->|use| LDAPI[LDAP Server]
-    LD -->|saves| JSON
-    TC[2: TimeCamp Synchronizer] -->|uses| JSON
-    TC -->|use| TAPI[TimeCamp API]
-    
-    style BH fill:#f9f,stroke:#333
-    style AD fill:#f9f,stroke:#333
-    style LD fill:#f9f,stroke:#333
-    style TC fill:#9f9,stroke:#333
-```
-
-### New Two-Stage Process (Recommended)
-
-```mermaid
-graph TD
-    BH[1a: BambooHR Fetcher] -->|use| BAPI[BambooHR API]
-    BH -->|saves| JSON1[users.json]
-    AD[1b: Azure/Entra Fetcher] -->|use| GRAPH[Microsoft Graph API]
-    AD -->|saves| JSON1
-    LD[1c: LDAP Fetcher] -->|use| LDAPI[LDAP Server]
-    LD -->|saves| JSON1
-    
-    PREP[2: Data Preparation] -->|reads| JSON1
-    PREP -->|creates| JSON2[timecamp_users.json]
-    
-    SYNC[3: TimeCamp Sync V2] -->|reads| JSON2
-    SYNC -->|use| TAPI[TimeCamp API]
-    
-    style BH fill:#f9f,stroke:#333
-    style AD fill:#f9f,stroke:#333
-    style LD fill:#f9f,stroke:#333
-    style PREP fill:#ff9,stroke:#333
-    style SYNC fill:#9f9,stroke:#333
-```
-
-## Two-Stage Synchronization Process
-
-The synchronization has been refactored into two separate stages for better maintainability and debugging:
-
-### Stage 1: Data Preparation
-```bash
-python3 prepare_timecamp_data.py
-```
-
-This script:
-- Reads the source `users.json` file
-- Processes supervisor/department structures based on configuration
-- Formats user names according to preferences (e.g., "Job Title [Name]")
-- Outputs a normalized `timecamp_users.json` file
+1. Create and fill `.env` file (see samples/env.sample)
+2. Get row data from SCIM system to json file, like
+   `python fetch_bamboohr.py`
+3. Transform SCIM json file data into TimeCamp json file structure 
+   `python prepare_timecamp_json_from_fetch.py`
+   `python scripts/display_timecamp_tree.py > var/structure.txt` (optional to visualise)
+4. Synchronize with TimeCamp API
+   `python timecamp_sync_users.py`
+5. Cleanup empty groups (optional)
+   `python scripts/remove_empty_groups.py`
 
 Options:
 - `--debug` - Enable debug logging
-- `--output <filename>` - Specify output file (default: timecamp_users.json)
-- `--pretty` - Pretty print the JSON output
-```
-
-### Stage 2: TimeCamp Synchronization
-```bash
-python3 timecamp_sync_v2.py
-```
-
-This script:
-- Reads the prepared `timecamp_users.json` file
-- Creates/updates group structure in TimeCamp
-- Creates/updates/deactivates users as needed
-- Handles role assignments and user settings
-
-Options:
 - `--dry-run` - Simulate without making changes
-- `--debug` - Enable debug logging
-- `--input <filename>` - Specify input file (default: timecamp_users.json)
 
-## Common Options
+**⚠️ IMPORTANT: BY DEFAULT IF ACCOUNT DOESN'T HAVE ENOUGH PAID SEATS IN SAAS, THEY WILL BE INCREASED AUTOMATICALLY**
 
-- `TIMECAMP_DISABLE_NEW_USERS=true` - Don't create new users, only update existing ones
-- `TIMECAMP_DISABLE_EXTERNAL_ID_SYNC=true` - Don't sync external IDs for users
-- `TIMECAMP_DISABLE_MANUAL_USER_UPDATES=true` - Skip any updates for users with the `added_manually=1` setting flag
-- `TIMECAMP_USE_SUPERVISOR_GROUPS=false` - Don't use supervisor-based group structures
-- `TIMECAMP_USE_JOB_TITLE_NAME=true` - Use job title in user names with format "job_title [name]" when available. Also affects supervisor group names when supervisor groups are enabled.
+## Crontab Setup
+
+To automate the synchronization with the two-stage process:
+
+```bash
+# Edit crontab
+crontab -e
+
+# For BambooHR:
+# Fetch users from BambooHR every hour
+0 * * * * cd /path/to/project && python fetch_bamboohr.py
+
+# Prepare TimeCamp data 10 minutes after fetch
+10 * * * * cd /path/to/project && python prepare_timecamp_json_from_fetch.py
+
+# Sync with TimeCamp 10 minutes after fetch
+20 * * * * cd /path/to/project && python timecamp_sync_users.py
+```
+
+Notes:
+- Replace `/path/to/project` with the actual path to your project
+- All operations are logged to `var/logs/sync.log`
 
 ## LDAP
 
@@ -172,112 +100,12 @@ AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
 AZURE_PREFER_REAL_EMAIL=true
 ```
 
-6. Fetch users and groups from Azure AD:
-```bash
-python3 azuread_fetch.py
-```
-   - This script will automatically handle token management and fetch users and groups
-   - If the token expires or becomes invalid, the script will automatically refresh it
-
-## Testing
-
-Always test the integration first using these steps:
-
-1. Test user fetch from your chosen source:
-```bash
-# For BambooHR:
-python bamboohr_fetch.py
-
-# For Azure AD / Microsoft Entra ID:
-python azuread_fetch.py
-
-# For LDAP:
-python ldap_fetch.py
-```
-
-2. Prepare the data for TimeCamp:
-```bash
-# Generate timecamp_users.json with formatted data
-python prepare_timecamp_data.py --pretty --debug
-```
-
-3. Review the generated `timecamp_users.json` to ensure the data is correct
-
-4. Test TimeCamp sync with dry-run:
-```bash
-# Test sync without making any changes
-python timecamp_sync_v2.py --dry-run --debug
-```
-
-5. If the dry run looks good, run the actual sync:
-```bash
-python timecamp_sync_v2.py
-```
-
-## Crontab Setup
-
-To automate the synchronization with the two-stage process:
-
-```bash
-# Edit crontab
-crontab -e
-
-# Add these lines (choose one source):
-
-# For BambooHR:
-# Fetch users from BambooHR every hour
-0 * * * * cd /path/to/project && python3 bamboohr_fetch.py
-
-# For Azure AD / Microsoft Entra ID:
-# Fetch users and groups every hour (token refresh is handled automatically)
-0 * * * * cd /path/to/project && python3 azuread_fetch.py
-
-# For LDAP:
-# Fetch users from LDAP every hour
-0 * * * * cd /path/to/project && python3 ldap_fetch.py
-
-# Prepare TimeCamp data 5 minutes after fetch
-5 * * * * cd /path/to/project && python3 prepare_timecamp_data.py
-
-# Sync with TimeCamp 10 minutes after fetch
-10 * * * * cd /path/to/project && python3 timecamp_sync_v2.py
-```
-
-Notes:
-- Replace `/path/to/project` with the actual path to your project
-- Replace `python3` with the path to your Python interpreter (find it using `which python3`)
-- All operations are logged to `logs/sync.log`
-
-### Using the Original One-Stage Process
-
-If you prefer to use the original one-stage synchronization:
-
-```bash
-# Run the original sync script directly after fetching
-python timecamp_sync.py [--dry-run] [--debug]
-```
-
-## Troubleshooting
-
-1. Check the logs:
-   - For real-time output: Watch the script execution in terminal
-   - For historical data: Check `logs/sync.log`
-2. Ensure all required environment variables are set in `.env`
-3. Verify API keys have the necessary permissions
-4. For crontab issues, check system logs: `grep CRON /var/log/syslog`
-5. For Azure AD token issues:
-   - The script automatically handles token refresh when needed
-   - If you're still having issues, you can manually force a token refresh by deleting the `AZURE_BEARER_TOKEN` line from your `.env` file and running the script again
-6. Run script with `--debug` param
-
 ## Not Yet Implemented
 
 - Setting to sync only selected things (like only new users)
 - Setting to move disabled users to specific group_id
-- Remove empty groups
 - Change of email (use external_id to identify user)
 - Refactor deparments and use array instead of string
-- General refactoring for timecamp_sync
 
 ## Test Cases
 
@@ -302,6 +130,7 @@ python timecamp_sync.py [--dry-run] [--debug]
    - User C (supervisor: B) → Group "A/B"
    - User D (supervisor: A) → Group "A"
    - User E (no supervisor, not a supervisor) → root group id
+- Remove empty groups
 
 ## License
 

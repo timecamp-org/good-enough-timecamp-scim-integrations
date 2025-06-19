@@ -138,10 +138,6 @@ def main():
         if config.skip_departments:
             logger.info(f"    → Will skip department prefix: '{config.skip_departments}'")
             
-        logger.info(f"  - TIMECAMP_DISABLE_NEW_USERS: {config.disable_new_users}")
-        logger.info(f"  - TIMECAMP_DISABLE_EXTERNAL_ID_SYNC: {config.disable_external_id_sync}")
-        logger.info(f"  - TIMECAMP_DISABLE_MANUAL_USER_UPDATES: {config.disable_manual_user_updates}")
-        
         # Get source users file
         users_file = get_users_file()
         logger.info(f"Reading source data from: {users_file}")

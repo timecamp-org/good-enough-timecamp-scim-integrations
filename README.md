@@ -6,24 +6,26 @@ Scripts to synchronize users from various HR systems with TimeCamp. Currently su
 - LDAP
 - Factorial
 
-First run:
+Follow these steps to sync your SCIM system data with TimeCamp:
 
-1. Create and fill `.env` file (see samples/env.sample)
-2. Get row data from SCIM system to json file, like
-   `python fetch_bamboohr.py`
-3. Transform SCIM json file data into TimeCamp json file structure 
+1. Create your .env file using the provided template if run without Docker (see samples/env.sample)
+2. Pull employee data from your SCIM system to json file:
+   `python fetch_bamboohr.py` (Note: Replace with your specific SCIM fetch script if different)
+3. Convert the SCIM data format to match TimeCamp's requirements:
    `python prepare_timecamp_json_from_fetch.py`
-   `python scripts/display_timecamp_tree.py > var/structure.txt` (optional to visualise)
-4. Synchronize with TimeCamp API
+   `python scripts/display_timecamp_tree.py > var/structure.txt` (Optional: Preview the organizational structure)
+4. Upload the transformed data to TimeCamp using TimeCamp REST API:
    `python timecamp_sync_users.py`
-5. Cleanup empty groups (optional)
+5. Remove any empty organizational groups (optional):
    `python scripts/remove_empty_groups.py`
 
 Options:
 - `--debug` - Enable debug logging
 - `--dry-run` - Simulate without making changes
 
-**⚠️ IMPORTANT: BY DEFAULT IF ACCOUNT DOESN'T HAVE ENOUGH PAID SEATS IN SAAS, THEY WILL BE INCREASED AUTOMATICALLY**
+**⚠️ BILLING WARNING**
+
+AUTOMATIC SEAT UPGRADES: If your TimeCamp account doesn't have enough paid seats for all users being synced, additional seats will be automatically added and charged to your account. Review your user count before proceeding to avoid unexpected billing charges.
 
 ## Crontab Setup
 

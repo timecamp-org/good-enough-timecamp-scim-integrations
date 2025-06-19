@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  timecamp-scim:
+    build: .
+    container_name: timecamp-scim
+    volumes:
+      # Mount var directory for persistent data and logs
+      - ./var:/app/var
+    environment:
+      - PYTHONUNBUFFERED=1
+      # TimeCamp Configuration
+      - TIMECAMP_API_KEY=${TIMECAMP_API_KEY}
+      - TIMECAMP_DOMAIN=${TIMECAMP_DOMAIN:-app.timecamp.com}
+      - TIMECAMP_ROOT_GROUP_ID=${TIMECAMP_ROOT_GROUP_ID}
+      - TIMECAMP_IGNORED_USER_IDS=${TIMECAMP_IGNORED_USER_IDS:-}
+      - TIMECAMP_SHOW_EXTERNAL_ID=${TIMECAMP_SHOW_EXTERNAL_ID:-true}
+      - TIMECAMP_SKIP_DEPARTMENTS=${TIMECAMP_SKIP_DEPARTMENTS:-}
+      - TIMECAMP_USE_SUPERVISOR_GROUPS=${TIMECAMP_USE_SUPERVISOR_GROUPS:-false}
+      - TIMECAMP_USE_DEPARTMENT_GROUPS=${TIMECAMP_USE_DEPARTMENT_GROUPS:-true}
+      - TIMECAMP_DISABLE_NEW_USERS=${TIMECAMP_DISABLE_NEW_USERS:-false}
+      - TIMECAMP_DISABLE_EXTERNAL_ID_SYNC=${TIMECAMP_DISABLE_EXTERNAL_ID_SYNC:-false}
+      - TIMECAMP_DISABLE_MANUAL_USER_UPDATES=${TIMECAMP_DISABLE_MANUAL_USER_UPDATES:-false}
+      - TIMECAMP_USE_JOB_TITLE_NAME=${TIMECAMP_USE_JOB_TITLE_NAME:-false}
+      # BambooHR Configuration
+      - BAMBOOHR_SUBDOMAIN=${BAMBOOHR_SUBDOMAIN:-}
+      - BAMBOOHR_API_KEY=${BAMBOOHR_API_KEY:-}
+      - BAMBOOHR_EXCLUDE_FILTER=${BAMBOOHR_EXCLUDE_FILTER:-}
+      - BAMBOOHR_EXCLUDED_DEPARTMENTS=${BAMBOOHR_EXCLUDED_DEPARTMENTS:-}
+      # Azure AD Configuration
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_SCIM_ENDPOINT=${AZURE_SCIM_ENDPOINT:-}
+      - AZURE_PREFER_REAL_EMAIL=${AZURE_PREFER_REAL_EMAIL:-false}
+      - AZURE_FILTER_GROUPS=${AZURE_FILTER_GROUPS:-}
+      - AZURE_BEARER_TOKEN=${AZURE_BEARER_TOKEN:-}
+      - AZURE_TOKEN_EXPIRES_AT=${AZURE_TOKEN_EXPIRES_AT:-}
+      - AZURE_REFRESH_TOKEN=${AZURE_REFRESH_TOKEN:-}
+      - AZURE_REFRESH_TOKEN_EXPIRES_AT=${AZURE_REFRESH_TOKEN_EXPIRES_AT:-}
+      # LDAP Configuration
+      - LDAP_HOST=${LDAP_HOST:-}
+      - LDAP_PORT=${LDAP_PORT:-389}
+      - LDAP_DOMAIN=${LDAP_DOMAIN:-}
+      - LDAP_DN=${LDAP_DN:-}
+      - LDAP_USERNAME=${LDAP_USERNAME:-}
+      - LDAP_PASSWORD=${LDAP_PASSWORD:-}
+      - LDAP_FILTER=${LDAP_FILTER:-}
+      - LDAP_PAGE_SIZE=${LDAP_PAGE_SIZE:-1000}
+      - LDAP_USE_SAMACCOUNTNAME=${LDAP_USE_SAMACCOUNTNAME:-false}
+      - LDAP_USE_OU_STRUCTURE=${LDAP_USE_OU_STRUCTURE:-false}
+      - LDAP_USE_REAL_EMAIL_AS_EMAIL=${LDAP_USE_REAL_EMAIL_AS_EMAIL:-false}
+      - LDAP_USE_WINDOWS_LOGIN_EMAIL=${LDAP_USE_WINDOWS_LOGIN_EMAIL:-false}
+      - LDAP_EMAIL_DOMAIN=${LDAP_EMAIL_DOMAIN:-}
+      - LDAP_USE_SSL=${LDAP_USE_SSL:-false}
+      - LDAP_USE_START_TLS=${LDAP_USE_START_TLS:-false}
+      - LDAP_SSL_VERIFY=${LDAP_SSL_VERIFY:-true}
+      # FactorialHR Configuration
+      - FACTORIAL_API_URL=${FACTORIAL_API_URL:-}
+      - FACTORIAL_API_KEY=${FACTORIAL_API_KEY:-}
+      - LeaveTypeMap=${LeaveTypeMap:-}
+    # Override the default command - you can specify what to run
+    command: ["fetch-bamboohr"]
+    
+  # Service for running different fetch commands
+  fetch-bamboohr:
+    extends: timecamp-scim
+    command: ["fetch-bamboohr"]
+    
+  fetch-azuread:
+    extends: timecamp-scim
+    command: ["fetch-azuread"]
+    
+  fetch-ldap:
+    extends: timecamp-scim
+    command: ["fetch-ldap"]
+    
+  fetch-factorial:
+    extends: timecamp-scim
+    command: ["fetch-factorial"]
+    
+  prepare-timecamp:
+    extends: timecamp-scim
+    command: ["prepare-timecamp"]
+    
+  sync-users:
+    extends: timecamp-scim
+    command: ["sync-users"]
+    
+  sync-time-off:
+    extends: timecamp-scim
+    command: ["sync-time-off"]
+    
+  display-tree:
+    extends: timecamp-scim
+    command: ["display-tree"]
+    
+  remove-empty-groups:
+    extends: timecamp-scim
+    command: ["remove-empty-groups"] 

@@ -1,0 +1,41 @@
+# Git files
+.git
+.gitignore
+
+# Docker files (except entrypoint script)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Environment files (use env variables instead)
+.env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv
+env
+ENV
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Documentation
+README.md 

@@ -1,0 +1,21 @@
+apiVersion: v2
+name: timecamp-scim
+description: TimeCamp SCIM Integration - Synchronizes users from HR systems to TimeCamp
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - timecamp
+  - scim
+  - hr
+  - integration
+  - bamboohr
+  - azuread
+  - ldap
+  - factorial
+home: https://github.com/timecamp-org/good-enough-timecamp-scim-integrations
+sources:
+  - https://github.com/timecamp-org/good-enough-timecamp-scim-integrations#
+maintainers:
+  - name: Kamil Bednarek
+    email: k.bednarek@timecamp.com

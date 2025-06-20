@@ -17,11 +17,7 @@ env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GAR_LOCATION: ${{ vars.GAR_LOCATION || 'us-central1' }}
   GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY || 'docker-images' }}
-  IMAGE_NAME: timecamp-scim-integration
-  
-  # Workload Identity Federation
-  WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
-  WIF_SERVICE_ACCOUNT: ${{ vars.WIF_SERVICE_ACCOUNT }}
+  IMAGE_NAME: scim-integration
 
 jobs:
   build-and-push:
@@ -42,15 +38,21 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
       
-      - name: Set up Cloud SDK
+      - name: Setup gcloud CLI with authenticated identity
         uses: google-github-actions/setup-gcloud@v2
       
-      - name: Configure Docker for Google Artifact Registry
+      - name: Who am I?
         run: |
-          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+          gcloud config get-value account
+          gcloud auth list
+      
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
       
       - name: Generate Docker metadata
         id: meta

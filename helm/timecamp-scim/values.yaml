@@ -1,0 +1,203 @@
+# Default values for timecamp-scim.
+replicaCount: 1
+
+image:
+  registry: your-region-docker.pkg.dev
+  repository: your-project-id/your-repository/scim-integration
+  pullPolicy: IfNotPresent
+  tag: ""  # Overrides the image tag whose default is the chart appVersion.
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations:
+    iam.gke.io/gcp-service-account: "scim-sa@your-project-id.iam.gserviceaccount.com"
+  # The name of the service account to use.
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+    - ALL
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# External Secrets Operator configuration
+externalSecrets:
+  enabled: true
+  # Google Secret Manager backend configuration
+  secretStore:
+    projectID: "your-project-id"
+    # If using Workload Identity
+    auth:
+      workloadIdentity:
+        clusterLocation: your-region
+        clusterName: your-cluster-name
+        serviceAccountRef:
+          name: scim  # K8s service account created by this chart
+
+# S3-compatible storage configuration (MinIO, AWS S3, etc.)
+s3:
+  # Enable S3 storage instead of local var/ folder
+  enabled: true
+  # S3 endpoint URL (for MinIO or other S3-compatible services)
+  endpointUrl: "http://s3.example.local:9000"
+  # S3 region
+  region: "your-region"
+  # Bucket name for storing intermediate files
+  bucketName: "scim-data"
+  # Path prefix within bucket (optional)
+  pathPrefix: ""
+  # Force path-style addressing (required for MinIO)
+  forcePathStyle: true
+
+# Job configurations - mirrors docker-compose services
+jobs:
+  # Fetch jobs run on schedule
+  fetchBamboohr:
+    enabled: false
+    schedule: "0 */6 * * *"  # Every 6 hours
+    command: ["python", "fetch_bamboohr.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    
+  fetchAzuread:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_azuread.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    
+  fetchLdap:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_ldap.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    
+  fetchFactorial:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_factorialhr.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+  
+  # Prepare job runs after fetch
+  prepareTimecamp:
+    enabled: false
+    schedule: "30 */6 * * *"  # 30 minutes after fetch
+    command: ["python", "prepare_timecamp_json_from_fetch.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+  
+  # Sync jobs
+  syncUsers:
+    enabled: false
+    schedule: "0 */6 * * *"  # Every 6 hours
+    command: ["python", "timecamp_sync_users.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    
+  syncTimeOff:
+    enabled: false
+    schedule: "0 8 * * *"  # Daily at 8 AM
+    command: ["python", "timecamp_sync_time_off.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+
+  # Utility jobs - run manually
+  displayTree:
+    enabled: false
+    command: ["python", "scripts/display_timecamp_tree.py", "--file", "var/timecamp_users.json"]
+    
+  removeEmptyGroups:
+    enabled: false
+    command: ["python", "scripts/remove_empty_groups.py"]
+
+# Configuration values - non-sensitive settings
+config:
+  # TimeCamp Configuration
+  timecamp:
+    domain: "app.timecamp.com"
+    rootGroupId: ""  # Optional: specific root group ID
+    ignoredUserIds: ""  # Comma-separated list of user IDs to ignore
+    showExternalId: true
+    skipDepartments: ""
+    useSupervisorGroups: false
+    useDepartmentGroups: true
+    disableNewUsers: false
+    disableExternalIdSync: false
+    disableManualUserUpdates: false
+    useJobTitleName: false
+  
+  # BambooHR Configuration
+  bamboohr:
+    subdomain: ""  # Your BambooHR subdomain
+    excludeFilter: ""
+    excludedDepartments: ""  # Comma-separated list
+  
+  # Azure AD Configuration
+  azure:
+    tenantId: ""
+    clientId: ""
+    scimEndpoint: "https://graph.microsoft.com/v1.0"
+    filterGroups: ""  # Comma-separated list of groups
+    preferRealEmail: false
+    tokenExpiresAt: ""
+    refreshTokenExpiresAt: ""
+  
+  # LDAP Configuration
+  ldap:
+    host: ""
+    port: 389
+    domain: ""
+    dn: ""  # Base DN for LDAP queries
+    username: ""  # LDAP bind username
+    filter: "(objectClass=user)"
+    emailDomain: ""
+    pageSize: 1000
+    useSamaccountname: false
+    useOuStructure: false
+    useRealEmailAsEmail: false
+    useWindowsLoginEmail: false
+    useSsl: false
+    useStartTls: false
+    sslVerify: true
+  
+  # FactorialHR Configuration
+  factorial:
+    apiUrl: "https://api.factorialhr.com/api/v1"
+    leaveTypeMap: "{}"  # JSON string mapping leave types
+
+# Environment variables - system settings
+env:
+  PYTHONUNBUFFERED: "1"
+  DISABLE_FILE_LOGGING: "true"

@@ -1,0 +1,45 @@
+{{- if .Values.jobs.displayTree.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "timecamp-scim.fullname" . }}-display-tree
+  labels:
+    {{- include "timecamp-scim.labels" . | nindent 4 }}
+    app.kubernetes.io/component: display-tree
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "timecamp-scim.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: display-tree
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "timecamp-scim.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      restartPolicy: Never
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "timecamp-scim.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{ .Values.jobs.displayTree.command | toJson }}
+          env:
+            {{- include "timecamp-scim.commonEnv" . | nindent 12 }}
+            {{- include "timecamp-scim.secretEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

@@ -125,7 +125,7 @@ AZURE_PREFER_REAL_EMAIL=true
 - Update user roles based on supervisor ✅
 - Update user external id ✅
 - Matching users based on TC email or TC additional email ✅
-- If setting TIMECAMP_DISABLE_NEW_USERS=true create only groups that are needed for existing users, don't create all groups that could be potentialy created ✅
+- If setting TIMECAMP_DISABLE_NEW_USERS=true create only groups that could be potentialy created ✅
 - Creating TimeCamp groups based on supervisor ✅
    - User A (no supervisor) → Group A
    - User B (supervisor: A) → Group "A/B"
@@ -133,6 +133,7 @@ AZURE_PREFER_REAL_EMAIL=true
    - User D (supervisor: A) → Group "A"
    - User E (no supervisor, not a supervisor) → root group id
 - Remove empty groups
+- S3-compatible storage for JSON files ✅
 
 ## Docker Support
 

@@ -75,8 +75,9 @@ class FactorialHRSynchronizer:
                     q['email'] = self.uid_lemail_map.get(q['employee_id'])
                 q['tc_leave_type'] = day_type_map.get(q['leave_type_name'], day_type_map.get('Default'))
                 result.append({'email': q['email'], 'start_on': q['start_on'], 'finish_on': q['finish_on'], 'tc_leave_type': q['tc_leave_type']})
-            with open("vacation.json", 'w') as f:
-                json.dump({'vacation': result}, f, indent=2)
+            from common.storage import save_json_file
+            
+            save_json_file({'vacation': result}, "vacation.json")
             return result
         except Exception as e:
             logger.error(f"Failed to fetch vacation data: {e}")

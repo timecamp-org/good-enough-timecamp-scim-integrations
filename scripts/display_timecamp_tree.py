@@ -158,8 +158,12 @@ def main():
     
     try:
         # Load the JSON file
-        with open(args.file, 'r') as f:
-            users = json.load(f)
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from common.storage import load_json_file
+        
+        users = load_json_file(args.file)
         
         if not isinstance(users, list):
             print(f"❌ Error: Expected a list of users in {args.file}")

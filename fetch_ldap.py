@@ -430,9 +430,10 @@ def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache
 
 def save_users_to_file(users):
     """Save users to JSON file."""
+    from common.storage import save_json_file
+    
     users_output = {"users": users}
-    with open("var/users.json", 'w', encoding='utf-8') as f:
-        json.dump(users_output, f, indent=2, ensure_ascii=False)
+    save_json_file(users_output, "var/users.json", encoding='utf-8')
     
     logger.info(f"Successfully saved {len(users)} users to var/users.json")
 

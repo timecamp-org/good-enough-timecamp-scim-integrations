@@ -143,8 +143,8 @@ def main():
         logger.info(f"Reading source data from: {users_file}")
         
         # Load source data
-        with open(users_file, 'r') as f:
-            source_data = json.load(f)
+        from common.storage import load_json_file
+        source_data = load_json_file(users_file)
         
         logger.info(f"Loaded {len(source_data.get('users', []))} users from source")
         
@@ -172,8 +172,8 @@ def main():
         logger.info(f"Unique group paths: {len(unique_groups)}")
         
         # Write output
-        with open(args.output, 'w') as f:
-            json.dump(timecamp_users, f, indent=2, ensure_ascii=False)
+        from common.storage import save_json_file
+        save_json_file(timecamp_users, args.output)
         
         logger.info(f"Successfully wrote TimeCamp data to: {args.output}")
         

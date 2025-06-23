@@ -1,0 +1,63 @@
+{{- if .Values.jobs.syncUsers.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "timecamp-scim.fullname" . }}-sync-users
+  labels:
+    {{- include "timecamp-scim.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sync-users
+spec:
+  schedule: "{{ .Values.jobs.syncUsers.schedule }}"
+  successfulJobsHistoryLimit: {{ .Values.jobs.syncUsers.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.jobs.syncUsers.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "timecamp-scim.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: sync-users
+          annotations:
+            {{- with .Values.podAnnotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "timecamp-scim.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          restartPolicy: OnFailure
+          containers:
+            - name: {{ .Chart.Name }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              image: {{ include "timecamp-scim.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: {{ .Values.jobs.syncUsers.command | toJson }}
+              env:
+                {{- include "timecamp-scim.commonEnv" . | nindent 16 }}
+                {{- include "timecamp-scim.secretEnv" . | nindent 16 }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

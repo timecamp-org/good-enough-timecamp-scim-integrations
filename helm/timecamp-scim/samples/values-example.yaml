@@ -1,0 +1,91 @@
+# Example values file for TimeCamp SCIM Integration
+# Copy this file and customize for your environment
+
+image:
+  registry: your-region-docker.pkg.dev
+  repository: your-project-id/your-repository/scim-integration
+  tag: "latest"
+
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: "scim-sa@your-project-id.iam.gserviceaccount.com"
+
+externalSecrets:
+  secretStore:
+    projectID: "your-project-id"
+    auth:
+      workloadIdentity:
+        clusterLocation: your-region
+        clusterName: your-cluster-name
+
+# S3-compatible storage (MinIO)
+s3:
+  enabled: true
+  endpointUrl: "http://s3.example.local:9000"
+  region: "your-region"
+  bucketName: "scim-data"
+  pathPrefix: ""
+  forcePathStyle: true
+
+# Configuration for TimeCamp
+config:
+  timecamp:
+    domain: "app.timecamp.com"
+    rootGroupId: "00000"  # Your root group ID
+    ignoredUserIds: "1,2,3"  # User IDs to ignore
+    showExternalId: true
+    useSupervisorGroups: false
+    useDepartmentGroups: true
+    disableNewUsers: false  # Set to true to prevent new user creation
+
+  # Configure based on your HR system
+  bamboohr:
+    subdomain: "company"
+    excludedDepartments: "Department1,Department2"  # Departments to exclude
+  
+  azure:
+    tenantId: "your-tenant-id"
+    clientId: "your-client-id"
+    filterGroups: "Group1,Group2"  # Groups to include
+  
+  ldap:
+    host: "ldap.company.local"
+    domain: "company.local"
+    dn: "CN=Users,DC=company,DC=local"
+    username: "ldap-reader"
+    emailDomain: "company.local"
+  
+  factorial:
+    leaveTypeMap: '{"vacation": "Vacation", "sick": "Sick Leave"}'
+
+# Enable the jobs you need
+jobs:
+  # Enable ONE fetch job based on your HR system
+  fetchBamboohr:
+    enabled: true
+    schedule: "0 */6 * * *"  # Every 6 hours
+  
+  # fetchAzuread:
+  #   enabled: true
+  #   schedule: "0 */6 * * *"
+  
+  # fetchLdap:
+  #   enabled: true
+  #   schedule: "0 */6 * * *"
+  
+  # fetchFactorial:
+  #   enabled: true
+  #   schedule: "0 */6 * * *"
+  
+  prepareTimecamp:
+    enabled: true
+    schedule: "30 */6 * * *"  # 30 minutes after fetch
+  
+  syncUsers:
+    enabled: true
+    schedule: "0 1,7,13,19 * * *"  # 4 times a day
+  
+  # Enable if using FactorialHR for time-off sync
+  # syncTimeOff:
+  #   enabled: true
+  #   schedule: "0 8 * * *"  # Daily at 8 AM

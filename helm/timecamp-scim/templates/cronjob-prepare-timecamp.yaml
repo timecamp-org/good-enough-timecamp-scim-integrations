@@ -2,7 +2,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "timecamp-scim.fullname" . }}-prepare-timecamp
+  name: timecamp-scim-prepare-timecamp
   labels:
     {{- include "timecamp-scim.labels" . | nindent 4 }}
     app.kubernetes.io/component: prepare-timecamp

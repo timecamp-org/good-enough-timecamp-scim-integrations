@@ -2,7 +2,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "timecamp-scim.fullname" . }}-fetch-bamboohr
+  name: timecamp-scim-fetch-bamboohr
   labels:
     {{- include "timecamp-scim.labels" . | nindent 4 }}
     app.kubernetes.io/component: fetch-bamboohr

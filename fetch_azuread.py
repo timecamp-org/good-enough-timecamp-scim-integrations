@@ -420,9 +420,10 @@ def fetch_azure_users():
             logger.info(f"Fetched {len(users)} users so far...")
         
         # Save users to file with proper encoding for Polish characters
+        from common.storage import save_json_file
+        
         users_output = {"users": users}
-        with open("var/users.json", 'w', encoding='utf-8') as f:
-            json.dump(users_output, f, indent=2, ensure_ascii=False)
+        save_json_file(users_output, "var/users.json", encoding='utf-8')
         
         logger.info(f"Successfully saved {len(users)} users to var/users.json")
         

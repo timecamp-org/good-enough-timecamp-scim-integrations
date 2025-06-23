@@ -89,10 +89,13 @@ def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't a
     return result.strip()
 
 def get_users_file() -> str:
-    """Get the users JSON file path."""
-    if not os.path.exists("var/users.json"):
+    """Get the users JSON file path and verify it exists."""
+    from .storage import file_exists
+    
+    filename = "var/users.json"
+    if not file_exists(filename):
         raise FileNotFoundError("var/users.json file not found. Please run the integration script first.")
-    return "var/users.json"
+    return filename
 
 def clean_department_path(path: Optional[str], config: Optional[TimeCampConfig] = None) -> str:
     """Clean and normalize department path. If config is provided with skip_departments, remove those prefixes."""

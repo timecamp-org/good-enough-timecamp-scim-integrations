@@ -487,8 +487,8 @@ def main():
             return 1
         
         # Load prepared TimeCamp users
-        with open(args.input, 'r') as f:
-            timecamp_users = json.load(f)
+        from common.storage import load_json_file
+        timecamp_users = load_json_file(args.input)
         
         logger.info(f"Loaded {len(timecamp_users)} users from {args.input}")
         

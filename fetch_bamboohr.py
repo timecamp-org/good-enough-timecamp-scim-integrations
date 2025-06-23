@@ -281,8 +281,9 @@ def fetch_bamboo_users():
         output_data = {"users": users}
         
         # Save to file in var directory
-        with open("var/users.json", 'w') as f:
-            json.dump(output_data, f, indent=2)
+        from common.storage import save_json_file
+        
+        save_json_file(output_data, "var/users.json")
         
         logger.info(f"Successfully saved {len(users)} users to var/users.json ({len(users) - len(inactive_supervisors)} active, {len(inactive_supervisors)} inactive supervisors)")
         

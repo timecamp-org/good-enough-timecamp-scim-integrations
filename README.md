@@ -367,6 +367,32 @@ python timecamp_sync_users.py --dry-run
 4. Add tests if applicable
 5. Submit a pull request
 
+## Test Cases
+
+- User changed name ✅
+- User changed group ✅
+- User added ✅
+- User disabled ✅
+- User removed ✅
+- User added as inactive ✅
+- User added with empty department ✅
+- Group name with whitespaces near / ✅
+- Setting enabled to add external_id to user name ✅
+- Don't send automatic email when user is created ✅
+- Setting and updating real user email as second email setting in TimeCamp ✅
+- Update user roles based on supervisor ✅
+- Update user external id ✅
+- Matching users based on TC email or TC additional email ✅
+- If setting TIMECAMP_DISABLE_NEW_USERS=true create only groups that could be potentialy created ✅
+- Creating TimeCamp groups based on supervisor ✅
+    - User A (no supervisor) → Group A
+    - User B (supervisor: A) → Group "A/B"
+    - User C (supervisor: B) → Group "A/B"
+    - User D (supervisor: A) → Group "A"
+    - User E (no supervisor, not a supervisor) → root group id
+- Remove empty groups
+- S3-compatible storage for JSON files ✅
+
 ## License
 
 MIT License - see LICENSE file for details.

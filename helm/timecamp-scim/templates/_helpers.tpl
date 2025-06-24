@@ -59,19 +59,6 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
-{{/*
-Create the image name
-*/}}
-{{- define "timecamp-scim.image" -}}
-{{- $registry := .Values.image.registry -}}
-{{- $repository := .Values.image.repository -}}
-{{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
-{{- if $registry -}}
-{{- printf "%s/%s:%s" $registry $repository $tag -}}
-{{- else -}}
-{{- printf "%s:%s" $repository $tag -}}
-{{- end -}}
-{{- end }}
 
 {{/*
 Common environment variables

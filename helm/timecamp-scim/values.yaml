@@ -2,8 +2,7 @@
 replicaCount: 1
 
 image:
-  registry: your-region-docker.pkg.dev
-  repository: your-project-id/your-repository/scim-integration
+  repository: your-region-docker.pkg.dev/your-project-id/your-repository/scim-integration
   pullPolicy: IfNotPresent
   tag: ""  # Overrides the image tag whose default is the chart appVersion.
 

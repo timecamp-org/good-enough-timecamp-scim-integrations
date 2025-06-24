@@ -34,7 +34,7 @@ spec:
             - name: {{ .Chart.Name }}
               securityContext:
                 {{- toYaml .Values.securityContext | nindent 16 }}
-              image: {{ include "timecamp-scim.image" . }}
+              image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               command: {{ .Values.jobs.prepareTimecamp.command | toJson }}
               env:

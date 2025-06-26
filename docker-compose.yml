@@ -6,6 +6,8 @@ services:
     container_name: timecamp-scim
     volumes:
       - ./var:/app/var
+    networks:
+      - timecamp-scim-network
     environment:
       - PYTHONUNBUFFERED=1
       - DISABLE_FILE_LOGGING=${DISABLE_FILE_LOGGING:-true}
@@ -97,4 +99,18 @@ services:
     
   remove-empty-groups:
     extends: timecamp-scim
-    command: ["python", "scripts/remove_empty_groups.py"] 
+    command: ["python", "scripts/remove_empty_groups.py"]
+    
+  # HTTP service to run any Python script via REST API
+  http-service:
+    extends: timecamp-scim
+    command: ["python", "http_service.py"]
+    ports:
+      - "8181:8181"
+    networks:
+      - timecamp-scim-network
+
+networks:
+  timecamp-scim-network:
+    driver: bridge
+    internal: true 

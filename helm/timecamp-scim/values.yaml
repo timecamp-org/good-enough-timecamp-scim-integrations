@@ -155,6 +155,7 @@ config:
     disableExternalIdSync: false
     disableManualUserUpdates: false
     useJobTitleName: false
+    replaceEmailDomain: ""  # Optional: replace email domain (e.g., "@test-timecamp.com")
   
   # BambooHR Configuration
   bamboohr:

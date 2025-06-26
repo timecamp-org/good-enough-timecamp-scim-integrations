@@ -37,6 +37,23 @@ def determine_role(source_user: Dict[str, Any]) -> str:
     return role_map.get(role_id, 'user')
 
 
+def replace_email_domain(email: str, new_domain: str) -> str:
+    """Replace the domain part of an email address with a new domain."""
+    if not new_domain or not email:
+        return email
+    
+    # Ensure the new domain starts with @
+    if not new_domain.startswith('@'):
+        new_domain = '@' + new_domain
+    
+    # Split the email at @ and replace the domain part
+    email_parts = email.split('@')
+    if len(email_parts) == 2:
+        return email_parts[0] + new_domain
+    
+    return email
+
+
 def process_group_path(department: Optional[str], config: TimeCampConfig) -> str:
     """Process the department path considering skip_departments configuration."""
     if not department:
@@ -72,11 +89,14 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         # Determine role
         role = determine_role(user_data)
         
+        # Apply email domain replacement if configured
+        timecamp_email = replace_email_domain(email, config.replace_email_domain)
+        
         # Create TimeCamp user structure
         timecamp_user = {
             'timecamp_external_id': user_data.get('external_id', ''),
             'timecamp_user_name': user_data['name'],  # Already formatted by process_source_data
-            'timecamp_email': email,
+            'timecamp_email': timecamp_email,
             'timecamp_groups_breadcrumb': group_breadcrumb,
             'timecamp_status': status,
             'timecamp_role': role
@@ -84,7 +104,9 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         
         # Add real_email if present and different from primary email
         if user_data.get('real_email') and user_data['real_email'].lower() != email.lower():
-            timecamp_user['timecamp_real_email'] = user_data['real_email']
+            # Also apply domain replacement to real_email if configured
+            timecamp_real_email = replace_email_domain(user_data['real_email'], config.replace_email_domain)
+            timecamp_user['timecamp_real_email'] = timecamp_real_email
         
         timecamp_users.append(timecamp_user)
     
@@ -137,6 +159,10 @@ def main():
         logger.info(f"  - TIMECAMP_SKIP_DEPARTMENTS: '{config.skip_departments}'")
         if config.skip_departments:
             logger.info(f"    → Will skip department prefix: '{config.skip_departments}'")
+            
+        logger.info(f"  - TIMECAMP_REPLACE_EMAIL_DOMAIN: '{config.replace_email_domain}'")
+        if config.replace_email_domain:
+            logger.info(f"    → Will replace email domains with: '{config.replace_email_domain}'")
             
         # Get source users file
         users_file = get_users_file()

@@ -18,6 +18,7 @@ class TimeCampConfig:
     disable_external_id_sync: bool
     disable_manual_user_updates: bool
     use_job_title_name: bool
+    replace_email_domain: str
 
     @classmethod
     def from_env(cls) -> 'TimeCampConfig':
@@ -43,6 +44,7 @@ class TimeCampConfig:
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
         use_job_title_name = os.getenv('TIMECAMP_USE_JOB_TITLE_NAME', 'false').lower() == 'true'
+        replace_email_domain = os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', '').strip()
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -63,7 +65,8 @@ class TimeCampConfig:
             disable_new_users=disable_new_users,
             disable_external_id_sync=disable_external_id_sync,
             disable_manual_user_updates=disable_manual_user_updates,
-            use_job_title_name=use_job_title_name
+            use_job_title_name=use_job_title_name,
+            replace_email_domain=replace_email_domain
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

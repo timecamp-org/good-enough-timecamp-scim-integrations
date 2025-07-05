@@ -53,10 +53,14 @@ class TimeCampSynchronizer:
         return path_map
     
     def _get_required_groups(self, timecamp_users: List[Dict[str, Any]]) -> Set[str]:
-        """Extract all unique group paths from TimeCamp users."""
+        """Extract all unique group paths from TimeCamp users, but only for active users."""
         group_paths = set()
         
         for user in timecamp_users:
+            # Only consider active users when determining required groups
+            if user.get('timecamp_status') != 'active':
+                continue
+                
             breadcrumb = user.get('timecamp_groups_breadcrumb', '')
             if breadcrumb:
                 # Add the full path
@@ -203,6 +207,12 @@ class TimeCampSynchronizer:
             if group_breadcrumb and group_breadcrumb in group_structure:
                 target_group_id = group_structure[group_breadcrumb]['group_id']
                 target_group_name = group_breadcrumb
+            elif group_breadcrumb and dry_run:
+                # In dry run mode, show the intended breadcrumb even if group doesn't exist
+                target_group_name = group_breadcrumb
+            elif group_breadcrumb:
+                # For actual execution, if group doesn't exist, use root
+                target_group_name = 'root'
             
             if existing_user:
                 # Update existing user
@@ -286,12 +296,12 @@ class TimeCampSynchronizer:
                 logger.info(f"Updating user {email}: {', '.join(changes)}")
                 self.api.update_user(user_id, updates, existing_user['group_id'])
                 
-                # Set added_manually to 0 if group was changed
-                if 'groupId' in updates:
-                    logger.info(f"Setting added_manually=0 for user {email} after group change")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
+                # Always set added_manually to 0 after any update to ensure proper tracking
+                logger.info(f"Setting added_manually=0 for user {email} after update")
+                self.api.update_user_setting(user_id, 'added_manually', '0')
             else:
                 logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
+                logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after update")
         
         # Handle additional email
         if 'timecamp_real_email' in tc_user_data:
@@ -300,8 +310,11 @@ class TimeCampSynchronizer:
                 if not dry_run:
                     logger.info(f"Updating additional email for user {email}")
                     self.api.set_additional_email(user_id, tc_user_data['timecamp_real_email'])
+                    logger.info(f"Setting added_manually=0 for user {email} after additional email update")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
                 else:
                     logger.info(f"[DRY RUN] Would update additional email for user {email}")
+                    logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after additional email update")
         
         # Handle external ID
         if tc_user_data.get('timecamp_external_id') and not self.config.disable_external_id_sync:
@@ -310,8 +323,11 @@ class TimeCampSynchronizer:
                 if not dry_run:
                     logger.info(f"Updating external ID for user {email}")
                     self.api.update_user_setting(user_id, 'external_id', tc_user_data['timecamp_external_id'])
+                    logger.info(f"Setting added_manually=0 for user {email} after external ID update")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
                 else:
                     logger.info(f"[DRY RUN] Would update external ID for user {email}")
+                    logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after external ID update")
     
     def _create_new_user(self, tc_user_data: Dict[str, Any], 
                         target_group_id: int, target_group_name: str,

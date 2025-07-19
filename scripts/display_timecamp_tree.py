@@ -8,6 +8,8 @@ as a tree structure with user counts and optional detailed user listings.
 
 import json
 import argparse
+import csv
+import io
 from typing import Dict, List, Any, Set
 from collections import defaultdict
 
@@ -66,6 +68,57 @@ def count_users_by_group(users: List[Dict[str, Any]]) -> Dict[str, List[Dict[str
                 groups['<root>'].append(user)
     
     return dict(groups)
+
+
+def parse_user_name(user_name: str) -> tuple[str, str]:
+    """Parse user name to extract job title and name.
+    
+    Expected format: "Job Title [Name]" or just "Name"
+    Returns: (job_title, name)
+    """
+    if not user_name:
+        return "", ""
+    
+    # Check if name contains job title in brackets format
+    if '[' in user_name and ']' in user_name:
+        # Extract job title and name from "Job Title [Name]" format
+        bracket_start = user_name.find('[')
+        bracket_end = user_name.find(']')
+        
+        if bracket_start > 0 and bracket_end > bracket_start:
+            job_title = user_name[:bracket_start].strip()
+            name = user_name[bracket_start+1:bracket_end].strip()
+            return job_title, name
+    
+    # If no brackets or invalid format, treat entire string as name
+    return "", user_name
+
+
+def generate_csv_output(users: List[Dict[str, Any]]) -> str:
+    """Generate CSV output with all users."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['external_id', 'name', 'job_title', 'department', 'status', 'supervisor_id', 'role'])
+    
+    # Write user data
+    for user in users:
+        external_id = user.get('timecamp_external_id', '')
+        user_name = user.get('timecamp_user_name', '')
+        department = user.get('timecamp_groups_breadcrumb', '')
+        status = user.get('timecamp_status', '')
+        role = user.get('timecamp_role', '')
+        
+        # Parse name and job title
+        job_title, name = parse_user_name(user_name)
+        
+        # supervisor_id is not available in current data structure
+        supervisor_id = ''
+        
+        writer.writerow([external_id, name, job_title, department, status, supervisor_id, role])
+    
+    return output.getvalue()
 
 
 def display_tree_structure(users: List[Dict[str, Any]], detailed: bool = False) -> None:
@@ -136,6 +189,14 @@ def display_tree_structure(users: List[Dict[str, Any]], detailed: bool = False) 
                 
                 real_email_info = f" [real: {real_email}]" if real_email and real_email != email else ""
                 print(f"   {role_emoji} {name} <{email}>{real_email_info}")
+
+    # Generate and display CSV output
+    print("\n" + "=" * 80)
+    print("CSV OUTPUT (ALL USERS)")
+    print("=" * 80)
+    
+    csv_output = generate_csv_output(users)
+    print(csv_output)
 
 
 def main():

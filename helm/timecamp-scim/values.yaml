@@ -156,6 +156,7 @@ config:
     disableManualUserUpdates: false
     useJobTitleName: false
     replaceEmailDomain: ""  # Optional: replace email domain (e.g., "@test-timecamp.com")
+    useIsSupervisorRole: false  # Use is_supervisor boolean field to determine supervisor role
   
   # BambooHR Configuration
   bamboohr:

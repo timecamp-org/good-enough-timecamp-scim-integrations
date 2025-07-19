@@ -11,7 +11,7 @@ logger = setup_logger()
 # Cache for not-found employee IDs to avoid repeated requests
 NOT_FOUND_EMPLOYEES_CACHE = set()
 
-def fetch_employees_by_ids(subdomain, headers, employee_ids):
+def fetch_employees_by_ids(subdomain, headers, employee_ids, supervisor_field=None):
     """Fetch multiple employees by their IDs using the dataset endpoint."""
     if not employee_ids:
         return []
@@ -34,6 +34,10 @@ def fetch_employees_by_ids(subdomain, headers, employee_ids):
             "status",
             "supervisorEid"
         ]
+        
+        # Add supervisor field dynamically if configured
+        if supervisor_field:
+            fields.append(supervisor_field)
         
         # Create individual equal filters for each employee ID
         employee_filters = []
@@ -65,7 +69,7 @@ def fetch_employees_by_ids(subdomain, headers, employee_ids):
         logger.error(f"Error fetching employees by IDs: {str(e)}")
         return []
 
-def fetch_missing_supervisors(subdomain, headers, users, excluded_departments):
+def fetch_missing_supervisors(subdomain, headers, users, excluded_departments, supervisor_field=None, supervisor_value=None):
     """Recursively fetch supervisors that are not in the current user set."""
     global NOT_FOUND_EMPLOYEES_CACHE
     
@@ -84,7 +88,7 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments):
     logger.info(f"Found {len(missing_supervisor_ids)} missing supervisors, fetching...")
     
     # Fetch all missing supervisors in batch
-    employees_data = fetch_employees_by_ids(subdomain, headers, missing_supervisor_ids)
+    employees_data = fetch_employees_by_ids(subdomain, headers, missing_supervisor_ids, supervisor_field)
     
     # Create a set of found employee IDs
     found_employee_ids = {emp.get('employeeNumber') for emp in employees_data if emp.get('employeeNumber')}
@@ -104,6 +108,12 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments):
         department = emp.get('jobInformationDepartment', '')
         combined_department = f"{division}/{department}" if department and division else department or division or ''
         
+        # Determine supervisor status based on rule
+        is_supervisor = False
+        if supervisor_field and supervisor_value:
+            field_value = emp.get(supervisor_field, '')
+            is_supervisor = str(field_value).strip() == supervisor_value
+        
         user = {
             "external_id": emp.get('employeeNumber'),
             "job_title": emp.get('jobInformationJobTitle'),
@@ -112,6 +122,7 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments):
             "department": combined_department,
             "status": "inactive",  # Mark as inactive since they weren't in the active set
             "supervisor_id": emp.get('supervisorId', ''),
+            "is_supervisor": is_supervisor,
         }
         
         inactive_supervisors.append(user)
@@ -130,7 +141,7 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments):
         if new_missing_ids:
             # Temporarily add inactive supervisors to the list for the recursive call
             temp_users = users + inactive_supervisors
-            next_level_supervisors = fetch_missing_supervisors(subdomain, headers, temp_users, excluded_departments)
+            next_level_supervisors = fetch_missing_supervisors(subdomain, headers, temp_users, excluded_departments, supervisor_field, supervisor_value)
             inactive_supervisors.extend(next_level_supervisors)
     
     return inactive_supervisors
@@ -156,6 +167,21 @@ def fetch_bamboo_users():
         # Get excluded departments
         excluded_departments_str = os.getenv('BAMBOOHR_EXCLUDED_DEPARTMENTS', '')
         excluded_departments = [dept.strip() for dept in excluded_departments_str.split(',') if dept.strip()]
+        
+        # Get supervisor rule configuration
+        supervisor_rule_str = os.getenv('BAMBOOHR_SUPERVISOR_RULE', '')
+        supervisor_field = None
+        supervisor_value = None
+        if supervisor_rule_str and ':' in supervisor_rule_str:
+            try:
+                supervisor_field, supervisor_value = supervisor_rule_str.split(':', 1)
+                supervisor_field = supervisor_field.strip()
+                supervisor_value = supervisor_value.strip()
+                logger.info(f"Using supervisor rule: {supervisor_field} = '{supervisor_value}'")
+            except ValueError:
+                logger.warning("Invalid BAMBOOHR_SUPERVISOR_RULE format, should be 'field_name:field_value'")
+                supervisor_field = None
+                supervisor_value = None
         
         if not all([subdomain, api_key]):
             raise ValueError("Missing required environment variables")
@@ -201,6 +227,10 @@ def fetch_bamboo_users():
             "supervisorEid"
         ]
         
+        # Add supervisor field dynamically if configured
+        if supervisor_field:
+            fields.append(supervisor_field)
+        
         # Prepare request payload
         payload = {
             "filters": {
@@ -226,7 +256,6 @@ def fetch_bamboo_users():
             data = response.json()
             employees = data.get('data', [])
             pagination = data.get('pagination', {})
-
             # logger.info(f"Page {current_page} employees: {json.dumps(employees, indent=2)}")
             
             all_employees.extend(employees)
@@ -258,6 +287,12 @@ def fetch_bamboo_users():
             division = emp.get('jobInformationDivision', '')
             combined_department = f"{division}/{department}" if department and division else department or division or ''
             
+            # Determine supervisor status based on rule
+            is_supervisor = False
+            if supervisor_field and supervisor_value:
+                field_value = emp.get(supervisor_field, '')
+                is_supervisor = str(field_value).strip() == supervisor_value
+            
             user = {
                 "external_id": emp.get('employeeNumber'),
                 "job_title": emp.get('jobInformationJobTitle'),
@@ -266,12 +301,13 @@ def fetch_bamboo_users():
                 "department": combined_department,
                 "status": "active",
                 "supervisor_id": emp.get('supervisorId', ''),
+                "is_supervisor": is_supervisor,
             }
             users.append(user)
         
         # Fetch missing supervisors recursively
         logger.info("Checking for missing supervisors in the hierarchy...")
-        inactive_supervisors = fetch_missing_supervisors(subdomain, headers, users, excluded_departments)
+        inactive_supervisors = fetch_missing_supervisors(subdomain, headers, users, excluded_departments, supervisor_field, supervisor_value)
         
         if inactive_supervisors:
             logger.info(f"Found {len(inactive_supervisors)} inactive supervisors to complete the hierarchy")

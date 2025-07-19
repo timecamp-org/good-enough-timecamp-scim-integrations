@@ -21,9 +21,20 @@ load_dotenv()
 logger = setup_logger('prepare_timecamp_data')
 
 
-def determine_role(source_user: Dict[str, Any]) -> str:
+def determine_role(source_user: Dict[str, Any], config: TimeCampConfig) -> str:
     """Determine the TimeCamp role based on source user data."""
-    # Check if role_id is specified in source data
+    # If configured to use is_supervisor boolean field
+    if config.use_is_supervisor_role:
+        is_supervisor = source_user.get('is_supervisor', False)
+        if isinstance(is_supervisor, bool):
+            return 'supervisor' if is_supervisor else 'user'
+        elif isinstance(is_supervisor, str):
+            # Handle string representations of boolean
+            return 'supervisor' if is_supervisor.lower() in ('true', '1', 'yes') else 'user'
+        # Fall back to default if is_supervisor field is not valid
+        return 'user'
+    
+    # Original behavior: Check if role_id is specified in source data
     role_id = source_user.get('role_id', '3')
     
     # Map role IDs to role names
@@ -60,6 +71,7 @@ def process_group_path(department: Optional[str], config: TimeCampConfig) -> str
         return ""
     
     # Skip departments logic is already applied in process_source_data via clean_department_path
+    # This now supports multiple comma-separated prefixes - first match is removed
     # This is just for any additional processing if needed
     return department
 
@@ -87,7 +99,7 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         group_breadcrumb = user_data.get('department', '')
         
         # Determine role
-        role = determine_role(user_data)
+        role = determine_role(user_data, config)
         
         # Apply email domain replacement if configured
         timecamp_email = replace_email_domain(email, config.replace_email_domain)
@@ -158,11 +170,21 @@ def main():
             
         logger.info(f"  - TIMECAMP_SKIP_DEPARTMENTS: '{config.skip_departments}'")
         if config.skip_departments:
-            logger.info(f"    → Will skip department prefix: '{config.skip_departments}'")
+            prefixes = [p.strip() for p in config.skip_departments.split(',') if p.strip()]
+            if len(prefixes) == 1:
+                logger.info(f"    → Will skip department prefix: '{prefixes[0]}'")
+            else:
+                logger.info(f"    → Will skip department prefixes: {prefixes}")
             
         logger.info(f"  - TIMECAMP_REPLACE_EMAIL_DOMAIN: '{config.replace_email_domain}'")
         if config.replace_email_domain:
             logger.info(f"    → Will replace email domains with: '{config.replace_email_domain}'")
+            
+        logger.info(f"  - TIMECAMP_USE_IS_SUPERVISOR_ROLE: {config.use_is_supervisor_role}")
+        if config.use_is_supervisor_role:
+            logger.info("    → Will determine supervisor role from 'is_supervisor' boolean field")
+        else:
+            logger.info("    → Will determine role from 'role_id' field (default behavior)")
             
         # Get source users file
         users_file = get_users_file()

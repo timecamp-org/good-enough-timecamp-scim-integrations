@@ -96,6 +96,8 @@ Common environment variables
   value: {{ .disableManualUserUpdates | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME
   value: {{ .useJobTitleName | quote }}
+- name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
+  value: {{ .useIsSupervisorRole | quote }}
 {{- end }}
 {{- /* BambooHR Configuration */ -}}
 {{- with .Values.config.bamboohr }}

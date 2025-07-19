@@ -19,6 +19,7 @@ class TimeCampConfig:
     disable_manual_user_updates: bool
     use_job_title_name: bool
     replace_email_domain: str
+    use_is_supervisor_role: bool
 
     @classmethod
     def from_env(cls) -> 'TimeCampConfig':
@@ -45,6 +46,7 @@ class TimeCampConfig:
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
         use_job_title_name = os.getenv('TIMECAMP_USE_JOB_TITLE_NAME', 'false').lower() == 'true'
         replace_email_domain = os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', '').strip()
+        use_is_supervisor_role = os.getenv('TIMECAMP_USE_IS_SUPERVISOR_ROLE', 'false').lower() == 'true'
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -66,7 +68,8 @@ class TimeCampConfig:
             disable_external_id_sync=disable_external_id_sync,
             disable_manual_user_updates=disable_manual_user_updates,
             use_job_title_name=use_job_title_name,
-            replace_email_domain=replace_email_domain
+            replace_email_domain=replace_email_domain,
+            use_is_supervisor_role=use_is_supervisor_role
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters
@@ -109,21 +112,26 @@ def clean_department_path(path: Optional[str], config: Optional[TimeCampConfig] 
     
     # Skip departments if config is provided and skip_departments is set
     if config and config.skip_departments and config.skip_departments.strip():
-        skip_prefix = config.skip_departments.strip()
+        skip_departments_str = config.skip_departments.strip()
         
-        # Check if the normalized path exactly matches the skip_departments
-        if normalized_path == skip_prefix:
-            return ""
+        # Parse comma-separated list of prefixes to skip
+        skip_prefixes = [prefix.strip() for prefix in skip_departments_str.split(',') if prefix.strip()]
+        
+        # Try each skip prefix until we find a match
+        for skip_prefix in skip_prefixes:
+            # Check if the normalized path exactly matches the skip_departments
+            if normalized_path == skip_prefix:
+                return ""
+                
+            # Check if it's a prefix, but only if it's a full component match
+            # For example: if skip is "foo" and path is "foo/bar", it will match
+            # but if skip is "fo" and path is "foo/bar", it won't match
+            parts = normalized_path.split('/')
+            skip_parts = skip_prefix.split('/')
             
-        # Check if it's a prefix, but only if it's a full component match
-        # For example: if skip is "foo" and path is "foo/bar", it will match
-        # but if skip is "fo" and path is "foo/bar", it won't match
-        parts = normalized_path.split('/')
-        skip_parts = skip_prefix.split('/')
-        
-        # Only match if all skip parts match exactly the beginning of the path
-        if (len(parts) >= len(skip_parts) and 
-            all(parts[i] == skip_parts[i] for i in range(len(skip_parts)))):
-            return '/'.join(parts[len(skip_parts):])
+            # Only match if all skip parts match exactly the beginning of the path
+            if (len(parts) >= len(skip_parts) and 
+                all(parts[i] == skip_parts[i] for i in range(len(skip_parts)))):
+                return '/'.join(parts[len(skip_parts):])
             
     return normalized_path 

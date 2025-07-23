@@ -116,7 +116,7 @@ class TimeCampSynchronizer:
                     }
                 else:
                     # Create new group
-                    if not dry_run:
+                    if not dry_run and not self.config.disable_groups_creation:
                         logger.info(f"Creating group: {part} under parent {parent_id}")
                         group_id = self.api.add_group(part, int(parent_id))
                         
@@ -132,6 +132,9 @@ class TimeCampSynchronizer:
                             'parent_id': parent_id
                         }
                         parent_id = str(group_id)
+                    elif self.config.disable_groups_creation:
+                        logger.info(f"Skipping group creation: {part} under parent {parent_id} (disable_groups_creation is enabled)")
+                        parent_id = '-1'  # Dummy ID when group creation is disabled
                     else:
                         logger.info(f"[DRY RUN] Would create group: {part} under parent {parent_id}")
                         parent_id = '-1'  # Dummy ID for dry run
@@ -501,6 +504,7 @@ def main():
         logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
         logger.debug(f"Disable group updates: {config.disable_group_updates}")
         logger.debug(f"Disable role updates: {config.disable_role_updates}")
+        logger.debug(f"Disable groups creation: {config.disable_groups_creation}")
         logger.debug(f"Ignored user IDs: {config.ignored_user_ids}")
         
         # Check if input file exists

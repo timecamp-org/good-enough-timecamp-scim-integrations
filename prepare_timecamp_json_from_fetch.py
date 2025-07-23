@@ -82,7 +82,8 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
     # This applies all the configuration options:
     # - TIMECAMP_USE_SUPERVISOR_GROUPS
     # - TIMECAMP_USE_DEPARTMENT_GROUPS  
-    # - TIMECAMP_USE_JOB_TITLE_NAME
+    # - TIMECAMP_USE_JOB_TITLE_NAME_USERS
+    # - TIMECAMP_USE_JOB_TITLE_NAME_GROUPS
     # - TIMECAMP_SHOW_EXTERNAL_ID
     # - TIMECAMP_SKIP_DEPARTMENTS
     processed_users, department_paths = process_source_data(source_data, config)
@@ -160,9 +161,13 @@ def main():
         else:
             logger.info("    → Using DEPARTMENT-ONLY mode: Traditional department-based groups")
         
-        logger.info(f"  - TIMECAMP_USE_JOB_TITLE_NAME: {config.use_job_title_name}")
-        if config.use_job_title_name:
+        logger.info(f"  - TIMECAMP_USE_JOB_TITLE_NAME_USERS: {config.use_job_title_name_users}")
+        if config.use_job_title_name_users:
             logger.info("    → User names will be formatted as: 'Job Title [Name]'")
+            
+        logger.info(f"  - TIMECAMP_USE_JOB_TITLE_NAME_GROUPS: {config.use_job_title_name_groups}")
+        if config.use_job_title_name_groups:
+            logger.info("    → Supervisor group names will be formatted as: 'Job Title [Name]'")
         
         logger.info(f"  - TIMECAMP_SHOW_EXTERNAL_ID: {config.show_external_id}")
         if config.show_external_id:

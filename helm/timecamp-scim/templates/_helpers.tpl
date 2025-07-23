@@ -94,8 +94,10 @@ Common environment variables
   value: {{ .disableExternalIdSync | quote }}
 - name: TIMECAMP_DISABLE_MANUAL_USER_UPDATES
   value: {{ .disableManualUserUpdates | quote }}
-- name: TIMECAMP_USE_JOB_TITLE_NAME
-  value: {{ .useJobTitleName | quote }}
+- name: TIMECAMP_USE_JOB_TITLE_NAME_USERS
+  value: {{ .useJobTitleNameUsers | quote }}
+- name: TIMECAMP_USE_JOB_TITLE_NAME_GROUPS
+  value: {{ .useJobTitleNameGroups | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
   value: {{ .useIsSupervisorRole | quote }}
 {{- end }}

@@ -154,7 +154,8 @@ config:
     disableNewUsers: false
     disableExternalIdSync: false
     disableManualUserUpdates: false
-    useJobTitleName: false
+    useJobTitleNameUsers: false
+    useJobTitleNameGroups: false
     replaceEmailDomain: ""  # Optional: replace email domain (e.g., "@test-timecamp.com")
     useIsSupervisorRole: false  # Use is_supervisor boolean field to determine supervisor role
   

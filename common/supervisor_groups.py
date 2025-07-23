@@ -27,6 +27,36 @@ def prepare_user_data(user_data: Dict[str, Any], show_external_id: bool, use_job
         user['email'] = user['email'].lower()
     return user
 
+def format_supervisor_name_for_group(user_data: Dict[str, Any], config) -> str:
+    """Format supervisor name for use as group name, respecting TIMECAMP_USE_JOB_TITLE_NAME_GROUPS setting."""
+    from common.utils import clean_name
+    
+    # Get the original name (this might be already formatted if user processing happened first)
+    # We need to work with the original data to apply group-specific formatting
+    base_name = user_data['name']
+    
+    # If the name is already formatted (contains job title), extract just the name part
+    # This handles cases where user processing already happened
+    if ' [' in base_name and base_name.endswith(']'):
+        # Extract name from "Job Title [Name]" format
+        bracket_pos = base_name.rfind(' [')
+        if bracket_pos > 0:
+            name_in_brackets = base_name[bracket_pos + 2:-1]  # Extract "Name" from " [Name]"
+            base_name = name_in_brackets
+    
+    # Use job title in name format if enabled for groups and available
+    if config.use_job_title_name_groups and user_data.get('job_title'):
+        base_name = f"{user_data['job_title']} [{base_name}]"
+    
+    # Apply external_id if configured
+    formatted_name = clean_name(
+        f"{base_name} - {user_data['external_id']}" 
+        if config.show_external_id and user_data.get('external_id') 
+        else base_name
+    )
+    
+    return formatted_name
+
 def collect_users_and_supervisors(source_data: Dict[str, Any], config) -> Tuple[Dict[str, Dict[str, Any]], Set[str]]:
     """First pass: collect all users and identify supervisors."""
     users_by_id = {}
@@ -46,7 +76,8 @@ def collect_users_and_supervisors(source_data: Dict[str, Any], config) -> Tuple[
 
 def build_supervisor_paths(source_data: Dict[str, Any], 
                         users_by_id: Dict[str, Dict[str, Any]], 
-                        supervisor_ids: Set[str]) -> Dict[str, str]:
+                        supervisor_ids: Set[str],
+                        config) -> Dict[str, str]:
     """Second pass: build paths for supervisors (top-down approach)."""
     supervisor_paths = {}
     
@@ -57,8 +88,8 @@ def build_supervisor_paths(source_data: Dict[str, Any],
             
         has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
         if not has_supervisor:
-            # Top-level supervisor gets their own group
-            supervisor_paths[user_id] = user.get('name', '')
+            # Top-level supervisor gets their own group - use group name formatting
+            supervisor_paths[user_id] = format_supervisor_name_for_group(user, config)
     
     # Then handle supervisors with supervisors
     more_to_process = True
@@ -75,7 +106,8 @@ def build_supervisor_paths(source_data: Dict[str, Any],
             if supervisor_id in supervisor_paths:
                 # Supervisor's supervisor is already processed, add this one
                 supervisor_path = supervisor_paths[supervisor_id]
-                supervisor_paths[user_id] = f"{supervisor_path}/{user.get('name', '')}"
+                supervisor_name = format_supervisor_name_for_group(user, config)
+                supervisor_paths[user_id] = f"{supervisor_path}/{supervisor_name}"
                 more_to_process = True
     
     return supervisor_paths
@@ -124,8 +156,9 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
                     department_paths.add(user['department'])
                     logger.debug(f"Supervisor {user.get('name')} assigned to group: {user['department']}")
             elif not has_supervisor:
-                # Fallback for top-level supervisor
-                user['department'] = clean_department_path(user.get('name', ''), config)
+                # Fallback for top-level supervisor - use group name formatting
+                supervisor_group_name = format_supervisor_name_for_group(user, config)
+                user['department'] = clean_department_path(supervisor_group_name, config)
                 if user['department']:
                     department_paths.add(user['department'])
                     logger.debug(f"Top-level supervisor {user.get('name')} assigned to own group: {user['department']}")
@@ -139,10 +172,11 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
                 if user['department']:
                     department_paths.add(user['department'])
             else:
-                # Fallback: direct supervisor's name
+                # Fallback: direct supervisor's name with group formatting
                 supervisor = users_by_id.get(supervisor_id)
                 if supervisor:
-                    user['department'] = clean_department_path(supervisor.get('name', ''), config)
+                    supervisor_group_name = format_supervisor_name_for_group(supervisor, config)
+                    user['department'] = clean_department_path(supervisor_group_name, config)
                     logger.debug(f"User {user.get('name')} assigned to supervisor's group: {user['department']}")
                     if user['department']:
                         department_paths.add(user['department'])
@@ -250,7 +284,7 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
                 supervisor_id = user.get('supervisor_id')
                 supervisor = users_by_id.get(supervisor_id)
                 if supervisor:
-                    supervisor_name = supervisor.get('name', '')  # Use full formatted name including job title
+                    supervisor_name = format_supervisor_name_for_group(supervisor, config)  # Use group formatting
                     user['department'] = f"{original_department}/{supervisor_name}"
                     logger.debug(f"User {user.get('name')} assigned to hybrid group: {user['department']}")
                 else:
@@ -274,7 +308,8 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
                 else:
                     supervisor = users_by_id.get(supervisor_id)
                     if supervisor:
-                        user['department'] = supervisor.get('name', '')
+                        supervisor_group_name = format_supervisor_name_for_group(supervisor, config)
+                        user['department'] = supervisor_group_name
                         logger.debug(f"User {user.get('name')} (no dept) assigned to supervisor's group: {user['department']}")
                     else:
                         user['department'] = ""  # Root group
@@ -313,7 +348,7 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
         logger.debug("Using hybrid approach: departments + supervisors")
         
         # Second pass: build supervisor paths
-        supervisor_paths = build_supervisor_paths(source_data, users_by_id, supervisor_ids)
+        supervisor_paths = build_supervisor_paths(source_data, users_by_id, supervisor_ids, config)
         
         # Third pass: assign departments using hybrid approach
         department_paths = assign_departments_hybrid(
@@ -324,7 +359,7 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
         logger.debug("Using supervisor-based groups only")
         
         # Second pass: build supervisor paths
-        supervisor_paths = build_supervisor_paths(source_data, users_by_id, supervisor_ids)
+        supervisor_paths = build_supervisor_paths(source_data, users_by_id, supervisor_ids, config)
         
         # Third pass: assign departments based on supervisor hierarchy
         department_paths = assign_departments_supervisor(

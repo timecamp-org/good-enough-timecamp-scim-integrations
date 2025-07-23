@@ -268,27 +268,32 @@ class TimeCampSynchronizer:
             updates['fullName'] = tc_user_data['timecamp_user_name']
             changes.append(f"name from '{existing_user['display_name']}' to '{tc_user_data['timecamp_user_name']}'")
         
-        # Check group update
-        if str(existing_user.get('group_id')) != str(target_group_id):
+        # Check group update (only if not disabled)
+        if not self.config.disable_group_updates and str(existing_user.get('group_id')) != str(target_group_id):
             updates['groupId'] = target_group_id
             changes.append(f"group to '{target_group_name}' (ID: {target_group_id})")
+        elif self.config.disable_group_updates and str(existing_user.get('group_id')) != str(target_group_id):
+            logger.debug(f"Skipping group update for user {email} due to disable_group_updates config")
         
-        # Check role update
-        desired_role = tc_user_data['timecamp_role']
-        role_map = {'administrator': '1', 'supervisor': '2', 'user': '3', 'guest': '5'}
-        desired_role_id = role_map.get(desired_role, '3')
-        
-        # Get current role for this user in their group
-        user_roles = current_roles.get(str(user_id), [])
-        current_role_id = None
-        for role_assignment in user_roles:
-            if str(role_assignment.get('group_id')) == str(existing_user.get('group_id')):
-                current_role_id = role_assignment.get('role_id')
-                break
-        
-        if current_role_id != desired_role_id:
-            updates['isManager'] = desired_role_id == '2'
-            changes.append(f"role to '{desired_role}'")
+        # Check role update (only if not disabled)
+        if not self.config.disable_role_updates:
+            desired_role = tc_user_data['timecamp_role']
+            role_map = {'administrator': '1', 'supervisor': '2', 'user': '3', 'guest': '5'}
+            desired_role_id = role_map.get(desired_role, '3')
+            
+            # Get current role for this user in their group
+            user_roles = current_roles.get(str(user_id), [])
+            current_role_id = None
+            for role_assignment in user_roles:
+                if str(role_assignment.get('group_id')) == str(existing_user.get('group_id')):
+                    current_role_id = role_assignment.get('role_id')
+                    break
+            
+            if current_role_id != desired_role_id:
+                updates['isManager'] = desired_role_id == '2'
+                changes.append(f"role to '{desired_role}'")
+        else:
+            logger.debug(f"Skipping role update for user {email} due to disable_role_updates config")
         
         # Apply updates
         if updates:
@@ -494,6 +499,8 @@ def main():
         logger.debug(f"Disable new users: {config.disable_new_users}")
         logger.debug(f"Disable external ID sync: {config.disable_external_id_sync}")
         logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
+        logger.debug(f"Disable group updates: {config.disable_group_updates}")
+        logger.debug(f"Disable role updates: {config.disable_role_updates}")
         logger.debug(f"Ignored user IDs: {config.ignored_user_ids}")
         
         # Check if input file exists

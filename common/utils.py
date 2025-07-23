@@ -17,6 +17,8 @@ class TimeCampConfig:
     disable_new_users: bool
     disable_external_id_sync: bool
     disable_manual_user_updates: bool
+    disable_group_updates: bool
+    disable_role_updates: bool
     use_job_title_name_users: bool
     use_job_title_name_groups: bool
     replace_email_domain: str
@@ -45,6 +47,8 @@ class TimeCampConfig:
         disable_new_users = os.getenv('TIMECAMP_DISABLE_NEW_USERS', 'false').lower() == 'true'
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
+        disable_group_updates = os.getenv('TIMECAMP_DISABLE_GROUP_UPDATES', 'false').lower() == 'true'
+        disable_role_updates = os.getenv('TIMECAMP_DISABLE_ROLE_UPDATES', 'false').lower() == 'true'
         use_job_title_name_users = os.getenv('TIMECAMP_USE_JOB_TITLE_NAME_USERS', 'false').lower() == 'true'
         use_job_title_name_groups = os.getenv('TIMECAMP_USE_JOB_TITLE_NAME_GROUPS', 'false').lower() == 'true'
         replace_email_domain = os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', '').strip()
@@ -69,6 +73,8 @@ class TimeCampConfig:
             disable_new_users=disable_new_users,
             disable_external_id_sync=disable_external_id_sync,
             disable_manual_user_updates=disable_manual_user_updates,
+            disable_group_updates=disable_group_updates,
+            disable_role_updates=disable_role_updates,
             use_job_title_name_users=use_job_title_name_users,
             use_job_title_name_groups=use_job_title_name_groups,
             replace_email_domain=replace_email_domain,

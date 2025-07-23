@@ -34,7 +34,7 @@ def collect_users_and_supervisors(source_data: Dict[str, Any], config) -> Tuple[
     
     for user in source_data['users']:
         # Clean and prepare user data
-        user = prepare_user_data(user, config.show_external_id, config.use_job_title_name)
+        user = prepare_user_data(user, config.show_external_id, config.use_job_title_name_users)
         
         if 'external_id' in user and user['external_id']:
             users_by_id[user['external_id']] = user
@@ -335,7 +335,7 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
         logger.debug("Using traditional department-based structure")
         # Still process users to get formatted names and set up emails correctly
         for user in source_data['users']:
-            user = prepare_user_data(user, config.show_external_id, config.use_job_title_name)
+            user = prepare_user_data(user, config.show_external_id, config.use_job_title_name_users)
             if 'external_id' in user and user['external_id']:
                 users_by_id[user['external_id']] = user
         department_paths = assign_departments_standard(source_data, config)

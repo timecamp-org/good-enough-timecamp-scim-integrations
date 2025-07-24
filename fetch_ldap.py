@@ -55,6 +55,7 @@ def get_ldap_config():
         'use_real_email_as_email': os.getenv('LDAP_USE_REAL_EMAIL_AS_EMAIL', 'false').lower() == 'true',
         'use_windows_login_email': os.getenv('LDAP_USE_WINDOWS_LOGIN_EMAIL', 'false').lower() == 'true',
         'email_domain': os.getenv('LDAP_EMAIL_DOMAIN', ''),
+        'replace_email_domain': os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', ''),
         'use_ssl': os.getenv('LDAP_USE_SSL', 'false').lower() == 'true',
         'use_start_tls': os.getenv('LDAP_USE_START_TLS', 'false').lower() == 'true',
         'ssl_verify': os.getenv('LDAP_SSL_VERIFY', 'true').lower() == 'true'
@@ -208,6 +209,45 @@ def get_manager_guid(ldap_connection, manager_dn, manager_guid_cache):
     
     return ""
 
+def select_email_from_domain(email_string, preferred_domain):
+    """
+    Select email from preferred domain when multiple emails are present.
+    
+    Args:
+        email_string: String containing one or more emails, possibly separated by commas
+        preferred_domain: Domain to prefer when multiple emails are available
+        
+    Returns:
+        Selected email address, or the first email if no domain match found
+    """
+    if not email_string:
+        return ""
+    
+    # Handle single email case
+    if ',' not in email_string:
+        return email_string.strip().lower()
+    
+    # Split emails by comma and clean them
+    emails = [email.strip().lower() for email in email_string.split(',') if email.strip()]
+    
+    if not emails:
+        return ""
+    
+    # If no preferred domain specified, return the first email
+    if not preferred_domain:
+        return emails[0]
+    
+    # Look for email matching the preferred domain
+    preferred_domain = preferred_domain.lower()
+    for email in emails:
+        if email.endswith(f'@{preferred_domain}'):
+            logger.debug(f"Selected email {email} from domain {preferred_domain}")
+            return email
+    
+    # If no match found, return the first email
+    logger.debug(f"No email found for domain {preferred_domain}, using first email: {emails[0]}")
+    return emails[0]
+
 def get_department_value(user_attrs, dn, use_ou_structure):
     """Determine department value based on configuration."""
     if use_ou_structure:
@@ -221,10 +261,14 @@ def get_department_value(user_attrs, dn, use_ou_structure):
 
 def create_user_object(user_attrs, manager_id, department, config):
     """Create transformed user object from LDAP attributes."""
+    # Process email from LDAP, selecting from preferred domain if multiple emails exist
+    raw_email = user_attrs.get('mail', '')
+    selected_email = select_email_from_domain(raw_email, config['replace_email_domain'])
+    
     transformed_user = {
         "external_id": user_attrs.get('objectGUID', ''),
         "name": normalize_text(user_attrs.get('displayName', '')),
-        "email": user_attrs.get('mail', '').lower(),
+        "email": selected_email,
         "department": department,
         "job_title": normalize_text(user_attrs.get('title', '')),
         "status": "active",
@@ -239,7 +283,7 @@ def create_user_object(user_attrs, manager_id, department, config):
             transformed_user["name"] = normalize_text(f"{first_name} {last_name}".strip())
     
     # Handle email generation based on configuration
-    original_mail = user_attrs.get('mail', '').lower()
+    original_mail = selected_email
     
     if config['use_windows_login_email']:
         # Use Windows login (sAMAccountName) with specified or LDAP domain
@@ -247,21 +291,21 @@ def create_user_object(user_attrs, manager_id, department, config):
             email_domain = config['email_domain'] if config['email_domain'] else config['domain']
             transformed_user["email"] = f"{user_attrs['sAMAccountName']}@{email_domain}".lower()
             # Always store original mail as real_email if available
-            if original_mail:
-                transformed_user["real_email"] = original_mail
+            if raw_email:
+                transformed_user["real_email"] = raw_email.lower()
     elif config['use_samaccountname']:
         # Prioritize sAMAccountName for email
         if user_attrs.get('sAMAccountName'):
             transformed_user["email"] = f"{user_attrs['sAMAccountName']}@{config['domain']}".lower()
             # Always store original mail as real_email if available
-            if original_mail:
-                transformed_user["real_email"] = original_mail
+            if raw_email:
+                transformed_user["real_email"] = raw_email.lower()
     # If email is still missing, fall back to sAMAccountName
     elif not transformed_user["email"] and user_attrs.get('sAMAccountName'):
         transformed_user["email"] = f"{user_attrs['sAMAccountName']}@{config['domain']}".lower()
         # Always store original mail as real_email if available
-        if original_mail:
-            transformed_user["real_email"] = original_mail
+        if raw_email:
+            transformed_user["real_email"] = raw_email.lower()
     
     # If configured to use real_email as email, swap them and clear real_email
     if config['use_real_email_as_email'] and transformed_user.get('real_email'):

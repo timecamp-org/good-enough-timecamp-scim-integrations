@@ -508,13 +508,13 @@ def main():
         logger.debug(f"Ignored user IDs: {config.ignored_user_ids}")
         
         # Check if input file exists
-        if not os.path.exists(args.input):
+        from common.storage import load_json_file, file_exists
+        if not file_exists(args.input):
             logger.error(f"Input file not found: {args.input}")
             logger.error("Please run prepare_timecamp_data.py first to generate the input file")
             return 1
         
         # Load prepared TimeCamp users
-        from common.storage import load_json_file
         timecamp_users = load_json_file(args.input)
         
         logger.info(f"Loaded {len(timecamp_users)} users from {args.input}")

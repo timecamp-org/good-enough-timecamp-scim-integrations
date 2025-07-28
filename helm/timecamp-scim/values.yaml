@@ -164,6 +164,7 @@ config:
     subdomain: ""  # Your BambooHR subdomain
     excludeFilter: ""
     excludedDepartments: ""  # Comma-separated list
+    supervisorRule: ""  # Rule for determining supervisors (e.g., "contains:Manager")
   
   # Azure AD Configuration
   azure:

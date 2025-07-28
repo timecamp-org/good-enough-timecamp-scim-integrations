@@ -111,6 +111,10 @@ Common environment variables
   value: {{ .excludeFilter | quote }}
 - name: BAMBOOHR_EXCLUDED_DEPARTMENTS
   value: {{ .excludedDepartments | quote }}
+{{- if .supervisorRule }}
+- name: BAMBOOHR_SUPERVISOR_RULE
+  value: {{ .supervisorRule | quote }}
+{{- end }}
 {{- end }}
 {{- /* Azure AD Configuration */ -}}
 {{- with .Values.config.azure }}

@@ -118,7 +118,7 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments, s
             "external_id": emp.get('employeeNumber'),
             "job_title": emp.get('jobInformationJobTitle'),
             "name": emp.get('name', '').strip(),
-            "email": emp.get('email', '').replace('@', '@test-') if emp.get('email') else '',
+            "email": emp.get('email', '') if emp.get('email') else '',
             "department": combined_department,
             "status": "inactive",  # Mark as inactive since they weren't in the active set
             "supervisor_id": emp.get('supervisorId', ''),
@@ -297,7 +297,7 @@ def fetch_bamboo_users():
                 "external_id": emp.get('employeeNumber'),
                 "job_title": emp.get('jobInformationJobTitle'),
                 "name": emp.get('name', '').strip(),
-                "email": emp.get('email').replace('@', '@test-'),
+                "email": emp.get('email'),
                 "department": combined_department,
                 "status": "active",
                 "supervisor_id": emp.get('supervisorId', ''),

@@ -140,7 +140,7 @@ AZURE_PREFER_REAL_EMAIL=true
 For easy deployment and consistent environments, you can run the application using Docker.
 
 ```bash
-docker-compose build
+docker compose build
 
 # Run specific commands using predefined services:
 

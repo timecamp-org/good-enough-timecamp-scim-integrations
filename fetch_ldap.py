@@ -50,6 +50,7 @@ def get_ldap_config():
         'filter': os.getenv('LDAP_FILTER', '(&(objectClass=person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'),
         'page_size': int(os.getenv('LDAP_PAGE_SIZE', '1000')),
         'use_samaccountname': os.getenv('LDAP_USE_SAMACCOUNTNAME', 'false').lower() == 'true',
+        'use_samaccountname_only': os.getenv('LDAP_USE_SAMACCOUNTNAME_ONLY', 'false').lower() == 'true',
         'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true',
         'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true',
         'use_real_email_as_email': os.getenv('LDAP_USE_REAL_EMAIL_AS_EMAIL', 'false').lower() == 'true',
@@ -285,7 +286,14 @@ def create_user_object(user_attrs, manager_id, department, config):
     # Handle email generation based on configuration
     original_mail = selected_email
     
-    if config['use_windows_login_email']:
+    if config['use_samaccountname_only']:
+        # Use only sAMAccountName without any domain
+        if user_attrs.get('sAMAccountName'):
+            transformed_user["email"] = user_attrs['sAMAccountName'].lower()
+            # Always store original mail as real_email if available
+            if raw_email:
+                transformed_user["real_email"] = raw_email.lower()
+    elif config['use_windows_login_email']:
         # Use Windows login (sAMAccountName) with specified or LDAP domain
         if user_attrs.get('sAMAccountName'):
             email_domain = config['email_domain'] if config['email_domain'] else config['domain']

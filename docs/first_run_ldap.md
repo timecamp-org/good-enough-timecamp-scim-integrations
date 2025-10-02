@@ -28,6 +28,7 @@ LDAP_PASSWORD=ldap_password
 LDAP_FILTER=(&(objectClass=person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))
 LDAP_PAGE_SIZE=1000  # Number of results per page (reduce if hitting server limits)
 LDAP_USE_SAMACCOUNTNAME=false  # Set to true to generate email from sAMAccountName instead of mail attribute
+LDAP_USE_SAMACCOUNTNAME_ONLY=true  # Set to true to use only sAMAccountName (without domain suffix) as email
 LDAP_USE_OU_STRUCTURE=false  # Set to true to use the OU structure from DN instead of department attribute
 LDAP_USE_REAL_EMAIL_AS_EMAIL=false  # Set to true to use real_email as primary email and clear real_email field
 LDAP_USE_WINDOWS_LOGIN_EMAIL=false  # Set to true to generate email as {windows_login}@domain format

@@ -41,7 +41,7 @@ class TimeCampConfig:
         # Parse other environment variables
         domain = os.getenv('TIMECAMP_DOMAIN', 'app.timecamp.com')
         ignored_user_ids_str = os.getenv('TIMECAMP_IGNORED_USER_IDS', '')
-        show_external_id = os.getenv('TIMECAMP_SHOW_EXTERNAL_ID', 'true').lower() == 'true'
+        show_external_id = os.getenv('TIMECAMP_SHOW_EXTERNAL_ID', 'false').lower() == 'true'
         skip_departments = os.getenv('TIMECAMP_SKIP_DEPARTMENTS', '').strip()
         use_supervisor_groups = os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true'
         use_department_groups = os.getenv('TIMECAMP_USE_DEPARTMENT_GROUPS', 'true').lower() == 'true'

@@ -59,7 +59,9 @@ def get_ldap_config():
         'replace_email_domain': os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', ''),
         'use_ssl': os.getenv('LDAP_USE_SSL', 'false').lower() == 'true',
         'use_start_tls': os.getenv('LDAP_USE_START_TLS', 'false').lower() == 'true',
-        'ssl_verify': os.getenv('LDAP_SSL_VERIFY', 'true').lower() == 'true'
+        'ssl_verify': os.getenv('LDAP_SSL_VERIFY', 'true').lower() == 'true',
+        'supervisor_group_name': os.getenv('LDAP_SUPERVISOR_GROUP_NAME', ''),
+        'global_admin_group_name': os.getenv('LDAP_GLOBAL_ADMIN_GROUP_NAME', '')
     }
     
     # Auto-detect SSL settings based on port if not explicitly set
@@ -178,6 +180,19 @@ def process_attributes(attributes):
             user_attrs[key] = convert_guid(value[0])
         elif key == 'manager':
             user_attrs[key] = decode_attribute(value)
+        elif key == 'memberOf':
+            # memberOf can have multiple values (multiple group memberships)
+            # Join them with a semicolon for easier processing
+            if isinstance(value, list):
+                decoded_groups = []
+                for group_dn in value:
+                    if isinstance(group_dn, bytes):
+                        decoded_groups.append(group_dn.decode('utf-8'))
+                    else:
+                        decoded_groups.append(group_dn)
+                user_attrs[key] = ';'.join(decoded_groups)
+            else:
+                user_attrs[key] = decode_attribute(value)
         else:
             user_attrs[key] = decode_attribute(value)
     
@@ -260,6 +275,23 @@ def get_department_value(user_attrs, dn, use_ou_structure):
     
     return department
 
+def check_group_membership(user_attrs, group_name):
+    """Check if user belongs to a specific group."""
+    if not group_name:
+        return False
+    
+    member_of = user_attrs.get('memberOf', '')
+    if not member_of:
+        return False
+    
+    # memberOf is a semicolon-separated list of group DNs
+    # Format is typically: CN=groupname,OU=...
+    group_name_lower = group_name.lower()
+    member_of_lower = member_of.lower()
+    
+    # Check if the group name is in any of the group DNs
+    return f'cn={group_name_lower},' in member_of_lower
+
 def create_user_object(user_attrs, manager_id, department, config):
     """Create transformed user object from LDAP attributes."""
     # Process email from LDAP, selecting from preferred domain if multiple emails exist
@@ -275,6 +307,18 @@ def create_user_object(user_attrs, manager_id, department, config):
         "status": "active",
         "supervisor_id": manager_id,
     }
+    
+    # Check if user belongs to supervisor group
+    if config.get('supervisor_group_name'):
+        is_supervisor = check_group_membership(user_attrs, config['supervisor_group_name'])
+        if is_supervisor:
+            transformed_user["force_supervisor_role"] = True
+    
+    # Check if user belongs to global admin group
+    if config.get('global_admin_group_name'):
+        is_global_admin = check_group_membership(user_attrs, config['global_admin_group_name'])
+        if is_global_admin:
+            transformed_user["force_global_admin_role"] = True
     
     # If display name is not available, try to construct from first and last name
     if not transformed_user["name"]:
@@ -332,7 +376,8 @@ def search_ldap_users(ldap_connection, config):
     retrieve_attributes = [
         'objectGUID', 'sAMAccountName', 'mail', 'displayName', 
         'department', 'title', 'givenName', 'sn', 'mobile',
-        'telephoneNumber', 'streetAddress', 'postalCode', 'manager'
+        'telephoneNumber', 'streetAddress', 'postalCode', 'manager',
+        'memberOf'
     ]
     
     # Initialize the pagination control
@@ -448,7 +493,7 @@ def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache
                         'objectGUID', 'sAMAccountName', 'mail', 'displayName', 
                         'department', 'title', 'givenName', 'sn', 'mobile',
                         'telephoneNumber', 'streetAddress', 'postalCode', 'manager',
-                        'userAccountControl'
+                        'userAccountControl', 'memberOf'
                     ]
                 )
                 

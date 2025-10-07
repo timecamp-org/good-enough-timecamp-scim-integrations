@@ -8,6 +8,12 @@ Scripts to synchronize users from various HR systems with TimeCamp. Currently su
 
 Follow these steps to sync your SCIM system data with TimeCamp:
 
+
+```
+sudo apt update
+sudo apt install python3-requests python3-dotenv python3-ldap python3-boto3 python3-flask
+```
+
 1. Create your .env file using the provided template if run without Docker (see samples/env.sample)
 2. Pull employee data from your SCIM system to json file:
    `python fetch_bamboohr.py` (Note: Replace with your specific SCIM fetch script if different)
@@ -57,6 +63,8 @@ Notes:
 - Optionally set `LDAP_PAGE_SIZE` to control the number of results retrieved per page (default is 1000)
 - Optionally set `LDAP_USE_SAMACCOUNTNAME=true` to generate email addresses from sAMAccountName rather than using the mail attribute
 - Optionally set `LDAP_USE_OU_STRUCTURE=true` to use the organizational unit (OU) structure from user's DN as the department value instead of the department attribute
+- Optionally set `LDAP_SUPERVISOR_GROUP_NAME` to specify an LDAP group name (e.g. `timecamp_mgr`) - when set, users belonging to this group will have `force_supervisor_role=true` set in the output
+- Optionally set `LDAP_GLOBAL_ADMIN_GROUP_NAME` to specify an LDAP group name (e.g. `timecamp_admin`) - when set, users belonging to this group will have `force_global_admin_role=true` set in the output
 - Run `python ldap_fetch.py` to fetch users from LDAP
 - Note: When using sAMAccountName for email, the original mail attribute is always included as `real_email` field if available
 

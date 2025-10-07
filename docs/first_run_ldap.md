@@ -36,6 +36,8 @@ LDAP_EMAIL_DOMAIN=  # Custom domain for email generation (optional, defaults to 
 LDAP_USE_SSL=false  # Set to true to use LDAPS (SSL) connection (port 636)
 LDAP_USE_START_TLS=false  # Set to true to use StartTLS to upgrade connection to encrypted
 LDAP_SSL_VERIFY=true  # Set to false to disable SSL certificate verification (not recommended for production)
+LDAP_SUPERVISOR_GROUP_NAME=  # LDAP group name to force supervisor role (e.g. timecamp_mgr). When set, users in this group will have force_supervisor_role=true
+LDAP_GLOBAL_ADMIN_GROUP_NAME=  # LDAP group name to force global admin role (e.g. timecamp_admin). When set, users in this group will have force_global_admin_role=true
 
 # 2. PREPARE TIMECAMP STRUCTURE (prepare_timecamp_json_from_fetch.py)
 TIMECAMP_USE_SUPERVISOR_GROUPS=false

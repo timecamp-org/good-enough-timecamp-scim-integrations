@@ -81,14 +81,17 @@ def build_supervisor_paths(source_data: Dict[str, Any],
     """Second pass: build paths for supervisors (top-down approach)."""
     supervisor_paths = {}
     
-    # First handle top-level supervisors (those with no supervisor)
+    # First handle top-level supervisors (those with no supervisor OR supervisor not present in dataset)
     for user_id, user in users_by_id.items():
         if user_id not in supervisor_ids:
             continue
-            
-        has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
-        if not has_supervisor:
-            # Top-level supervisor gets their own group - use group name formatting
+        
+        parent_id = user.get('supervisor_id')
+        has_parent_value = parent_id and str(parent_id).strip()
+        parent_exists_in_data = has_parent_value and parent_id in users_by_id
+        
+        if not has_parent_value or not parent_exists_in_data:
+            # Treat as top-level when no parent or parent not present in dataset
             supervisor_paths[user_id] = format_supervisor_name_for_group(user, config)
     
     # Then handle supervisors with supervisors
@@ -100,7 +103,7 @@ def build_supervisor_paths(source_data: Dict[str, Any],
                 continue
                 
             supervisor_id = user.get('supervisor_id')
-            if not supervisor_id or not supervisor_id.strip():
+            if not supervisor_id or not str(supervisor_id).strip():
                 continue
                 
             if supervisor_id in supervisor_paths:

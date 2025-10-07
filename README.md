@@ -116,6 +116,7 @@ AZURE_PREFER_REAL_EMAIL=true
 - Setting to move disabled users to specific group_id
 - Change of email (use external_id to identify user)
 - Refactor deparments and use array instead of string
+- Unit tests!
 
 ## Test Cases
 

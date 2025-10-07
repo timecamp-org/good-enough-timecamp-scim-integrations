@@ -21,9 +21,31 @@ load_dotenv()
 logger = setup_logger('prepare_timecamp_data')
 
 
-def determine_role(source_user: Dict[str, Any], config: TimeCampConfig) -> str:
+def check_force_supervisor_exists(source_data: Dict[str, Any]) -> bool:
+    """Check if any user has force_supervisor_role=true in the source data."""
+    users = source_data.get('users', [])
+    for user in users:
+        if user.get('force_supervisor_role') is True:
+            return True
+    return False
+
+
+def determine_role(source_user: Dict[str, Any], config: TimeCampConfig, force_supervisor_exists: bool = False) -> str:
     """Determine the TimeCamp role based on source user data."""
-    # If configured to use is_supervisor boolean field
+    # Priority 1: Check for force_global_admin_role (highest priority)
+    if source_user.get('force_global_admin_role') is True:
+        return 'administrator'
+    
+    # Priority 2: Check for force_supervisor_role
+    if source_user.get('force_supervisor_role') is True:
+        return 'supervisor'
+    
+    # If force_supervisor_role exists in dataset, disable other supervisor role logic
+    # and return 'user' for non-forced users
+    if force_supervisor_exists:
+        return 'user'
+    
+    # Priority 3: If configured to use is_supervisor boolean field
     if config.use_is_supervisor_role:
         is_supervisor = source_user.get('is_supervisor', False)
         if isinstance(is_supervisor, bool):
@@ -34,7 +56,7 @@ def determine_role(source_user: Dict[str, Any], config: TimeCampConfig) -> str:
         # Fall back to default if is_supervisor field is not valid
         return 'user'
     
-    # Original behavior: Check if role_id is specified in source data
+    # Priority 4: Original behavior - Check if role_id is specified in source data
     role_id = source_user.get('role_id', '3')
     
     # Map role IDs to role names
@@ -78,6 +100,12 @@ def process_group_path(department: Optional[str], config: TimeCampConfig) -> str
 
 def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) -> List[Dict[str, Any]]:
     """Process source data and prepare the final TimeCamp user structure."""
+    # Check if force_supervisor_role exists in the source data
+    force_supervisor_exists = check_force_supervisor_exists(source_data)
+    
+    if force_supervisor_exists:
+        logger.info("Detected force_supervisor_role in dataset - other supervisor role logic will be disabled")
+    
     # Process source data using the supervisor_groups module
     # This applies all the configuration options:
     # - TIMECAMP_USE_SUPERVISOR_GROUPS
@@ -99,8 +127,12 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         # The department/group breadcrumb has already been processed with all configurations
         group_breadcrumb = user_data.get('department', '')
         
+        # Force global admins to main group (empty breadcrumb)
+        if user_data.get('force_global_admin_role') is True:
+            group_breadcrumb = ''
+        
         # Determine role
-        role = determine_role(user_data, config)
+        role = determine_role(user_data, config, force_supervisor_exists)
         
         # Apply email domain replacement if configured
         timecamp_email = replace_email_domain(email, config.replace_email_domain)
@@ -190,6 +222,10 @@ def main():
             logger.info("    → Will determine supervisor role from 'is_supervisor' boolean field")
         else:
             logger.info("    → Will determine role from 'role_id' field (default behavior)")
+        
+        logger.info("  - Force role fields:")
+        logger.info("    → force_global_admin_role=true → Administrator role (highest priority)")
+        logger.info("    → force_supervisor_role=true → Supervisor role (if any exist, disables other supervisor logic)")
             
         # Get source users file
         users_file = get_users_file()
@@ -219,6 +255,15 @@ def main():
         
         for role, count in sorted(role_counts.items()):
             logger.info(f"{role.capitalize()} users: {count}")
+        
+        # Count users with forced roles from source data
+        force_admin_count = sum(1 for u in source_data.get('users', []) if u.get('force_global_admin_role') is True)
+        force_supervisor_count = sum(1 for u in source_data.get('users', []) if u.get('force_supervisor_role') is True)
+        
+        if force_admin_count > 0:
+            logger.info(f"Users with force_global_admin_role: {force_admin_count}")
+        if force_supervisor_count > 0:
+            logger.info(f"Users with force_supervisor_role: {force_supervisor_count}")
         
         # Count unique group paths
         unique_groups = {u['timecamp_groups_breadcrumb'] for u in timecamp_users if u['timecamp_groups_breadcrumb']}

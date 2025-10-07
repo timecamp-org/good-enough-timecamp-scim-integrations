@@ -293,7 +293,7 @@ class TimeCampSynchronizer:
                     break
             
             if current_role_id != desired_role_id:
-                updates['isManager'] = desired_role_id == '2'
+                updates['role_id'] = desired_role_id
                 changes.append(f"role to '{desired_role}'")
         else:
             logger.debug(f"Skipping role update for user {email} due to disable_role_updates config")
@@ -441,9 +441,11 @@ class TimeCampSynchronizer:
                 
                 # Set role if not default
                 role = new_user.get('role', 'user')
-                if role == 'supervisor':
-                    logger.info(f"Setting supervisor role for new user {email}")
-                    self.api.update_user(user_id, {'isManager': True}, new_user['group_id'])
+                if role != 'user':
+                    role_map = {'administrator': '1', 'supervisor': '2', 'user': '3', 'guest': '5'}
+                    role_id = role_map.get(role, '3')
+                    logger.info(f"Setting {role} role for new user {email}")
+                    self.api.update_user(user_id, {'role_id': role_id}, new_user['group_id'])
                 
                 # Set additional email if present
                 if new_user.get('real_email'):

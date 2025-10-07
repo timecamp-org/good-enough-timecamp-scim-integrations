@@ -103,7 +103,12 @@ class TimeCampAPI:
             self._make_request('POST', "user", json={"display_name": updates['fullName'], "user_id": str(user_id)})
         if 'groupId' in updates:
             self._make_request('PUT', f"group/{group_id}/user", json={"group_id": str(updates['groupId']), "user_id": str(user_id)})
-        if 'isManager' in updates:
+        if 'role_id' in updates:
+            # Directly set the role_id (1=admin, 2=supervisor, 3=user, 5=guest)
+            self._make_request('PUT', f"group/{group_id}/user", 
+                             json={"role_id": str(updates['role_id']), "user_id": str(user_id)})
+        elif 'isManager' in updates:
+            # Legacy support: isManager boolean (kept for backward compatibility)
             self._make_request('PUT', f"group/{group_id}/user", 
                              json={"role_id": "2" if updates['isManager'] else "3", "user_id": str(user_id)})
 

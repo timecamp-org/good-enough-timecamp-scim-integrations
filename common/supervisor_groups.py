@@ -148,7 +148,7 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
         user['isManager'] = user_id in users_with_subordinates
         
         if is_a_supervisor:
-            # User is a supervisor - assign to their path in the hierarchy
+            # User is a supervisor - assign to their path in the hierarchy if available
             if user_id in supervisor_paths:
                 # Apply skip_departments configuration to supervisor paths
                 user['department'] = clean_department_path(supervisor_paths[user_id], config)
@@ -162,6 +162,22 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
                 if user['department']:
                     department_paths.add(user['department'])
                     logger.debug(f"Top-level supervisor {user.get('name')} assigned to own group: {user['department']}")
+            else:
+                # Supervisor who also has a supervisor but path not built yet → place under their supervisor's group
+                parent_supervisor_id = user.get('supervisor_id')
+                if parent_supervisor_id in supervisor_paths:
+                    user['department'] = clean_department_path(supervisor_paths[parent_supervisor_id], config)
+                    logger.debug(f"Supervisor {user.get('name')} assigned under supervisor's group: {user['department']}")
+                    if user['department']:
+                        department_paths.add(user['department'])
+                else:
+                    parent_supervisor = users_by_id.get(parent_supervisor_id)
+                    if parent_supervisor:
+                        supervisor_group_name = format_supervisor_name_for_group(parent_supervisor, config)
+                        user['department'] = clean_department_path(supervisor_group_name, config)
+                        logger.debug(f"Supervisor {user.get('name')} assigned under supervisor's group (fallback): {user['department']}")
+                        if user['department']:
+                            department_paths.add(user['department'])
         elif has_supervisor:
             # Regular user with supervisor
             supervisor_id = user.get('supervisor_id')

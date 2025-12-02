@@ -113,7 +113,6 @@ AZURE_PREFER_REAL_EMAIL=true
 ## Not Yet Implemented
 
 - Setting to sync only selected things (like only new users)
-- Setting to move disabled users to specific group_id
 - Change of email (use external_id to identify user)
 - Refactor deparments and use array instead of string
 - Unit tests!
@@ -143,6 +142,7 @@ AZURE_PREFER_REAL_EMAIL=true
    - User E (no supervisor, not a supervisor) → root group id
 - Remove empty groups
 - S3-compatible storage for JSON files ✅
+- Move disabled users to specific group (TIMECAMP_DISABLED_USERS_GROUP_ID) ✅
 
 ## Docker Support
 

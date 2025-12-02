@@ -15,7 +15,7 @@ services:
       - TIMECAMP_API_KEY=${TIMECAMP_API_KEY}
       - TIMECAMP_DOMAIN=${TIMECAMP_DOMAIN:-app.timecamp.com}
       - TIMECAMP_ROOT_GROUP_ID=${TIMECAMP_ROOT_GROUP_ID}
-      - TIMECAMP_IGNORED_USER_IDS=${TIMECAMP_IGNORED_USER_IDS:-}
+      - TIMECAMP_IGNORED_USER_IDS=${TIMECAMP_IGNORED_USER_IDS:-3}
       - TIMECAMP_SHOW_EXTERNAL_ID=${TIMECAMP_SHOW_EXTERNAL_ID:-false}
       - TIMECAMP_SKIP_DEPARTMENTS=${TIMECAMP_SKIP_DEPARTMENTS:-}
       - TIMECAMP_USE_SUPERVISOR_GROUPS=${TIMECAMP_USE_SUPERVISOR_GROUPS:-false}
@@ -26,6 +26,7 @@ services:
       - TIMECAMP_USE_JOB_TITLE_NAME_USERS=${TIMECAMP_USE_JOB_TITLE_NAME_USERS:-false}
       - TIMECAMP_USE_JOB_TITLE_NAME_GROUPS=${TIMECAMP_USE_JOB_TITLE_NAME_GROUPS:-false}
       - TIMECAMP_USE_IS_SUPERVISOR_ROLE=${TIMECAMP_USE_IS_SUPERVISOR_ROLE:-false}
+      - TIMECAMP_DISABLED_USERS_GROUP_ID=${TIMECAMP_DISABLED_USERS_GROUP_ID:-0}
       # BambooHR Configuration
       - BAMBOOHR_SUBDOMAIN=${BAMBOOHR_SUBDOMAIN:-}
       - BAMBOOHR_API_KEY=${BAMBOOHR_API_KEY:-}
@@ -52,6 +53,7 @@ services:
       - LDAP_FILTER=${LDAP_FILTER:-}
       - LDAP_PAGE_SIZE=${LDAP_PAGE_SIZE:-1000}
       - LDAP_USE_SAMACCOUNTNAME=${LDAP_USE_SAMACCOUNTNAME:-false}
+      - LDAP_USE_SAMACCOUNTNAME_ONLY=${LDAP_USE_SAMACCOUNTNAME_ONLY:-false}      
       - LDAP_USE_OU_STRUCTURE=${LDAP_USE_OU_STRUCTURE:-false}
       - LDAP_USE_REAL_EMAIL_AS_EMAIL=${LDAP_USE_REAL_EMAIL_AS_EMAIL:-false}
       - LDAP_USE_WINDOWS_LOGIN_EMAIL=${LDAP_USE_WINDOWS_LOGIN_EMAIL:-false}
@@ -89,7 +91,8 @@ services:
     
   sync-users:
     extends: timecamp-scim
-    command: ["python", "timecamp_sync_users.py"]
+    entrypoint: ["python", "timecamp_sync_users.py"]
+    command: []
     
   sync-time-off:
     extends: timecamp-scim
@@ -115,4 +118,4 @@ services:
 networks:
   timecamp-scim-network:
     driver: bridge
-    internal: true 
+    # internal: true 

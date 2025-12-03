@@ -14,23 +14,78 @@ def normalize_text(text):
         return ""
     return text
 
-def extract_ou_path(dn):
-    """Extract OU path from distinguished name."""
+def extract_ou_path(dn, ldap_connection=None, use_description=False, ou_description_cache=None):
+    """Extract OU path from distinguished name.
+    
+    Args:
+        dn: Distinguished name to parse
+        ldap_connection: LDAP connection object (required if use_description=True)
+        use_description: If True, use OU description field instead of CN
+        ou_description_cache: Dictionary to cache OU descriptions
+    
+    Returns:
+        String representing the OU path
+    """
     if not dn:
         return ""
     
     # Split the DN into parts
     parts = dn.split(',')
     
-    # Extract OUs (skip the first part as it's the user CN)
+    # Extract OUs
     ou_parts = []
-    for part in parts:
-        if part.strip().lower().startswith('ou='):
-            # Remove the 'OU=' prefix and extract the OU name
-            ou_name = part.strip()[3:]
-            ou_parts.append(ou_name)
     
-    # Reverse the order to get top-level OU first
+    for i, part in enumerate(parts):
+        clean_part = part.strip()
+        if clean_part.lower().startswith('ou='):
+            # Extract the OU name (remove 'OU=' prefix)
+            ou_name = clean_part[3:]
+            final_ou_name = ou_name
+            
+            # If use_description is enabled, try to replace OU name with description
+            if use_description and ldap_connection and ou_description_cache is not None:
+                # Reconstruct the full DN for this OU
+                # The DN for an OU at index i consists of parts from i to the end
+                ou_dn = ','.join([p.strip() for p in parts[i:]])
+                
+                # Check cache first
+                if ou_dn in ou_description_cache:
+                    description = ou_description_cache[ou_dn]
+                    if description:
+                        final_ou_name = description
+                else:
+                    # Query LDAP for the OU's description
+                    try:
+                        ou_result = ldap_connection.search_s(
+                            ou_dn,
+                            ldap.SCOPE_BASE,
+                            '(objectClass=*)',
+                            ['description']
+                        )
+                        
+                        description = ""
+                        if ou_result and len(ou_result) > 0 and len(ou_result[0]) > 1:
+                            ou_attrs = ou_result[0][1]
+                            if 'description' in ou_attrs and ou_attrs['description']:
+                                description_value = ou_attrs['description'][0]
+                                if isinstance(description_value, bytes):
+                                    description = description_value.decode('utf-8')
+                                else:
+                                    description = description_value
+                        
+                        # Cache the result
+                        ou_description_cache[ou_dn] = description
+                        
+                        if description:
+                            final_ou_name = description
+                            
+                    except Exception as e:
+                        logger.warning(f"Error retrieving OU description for {ou_dn}: {str(e)}")
+                        ou_description_cache[ou_dn] = ""
+            
+            ou_parts.append(final_ou_name)
+    
+    # Reverse the order to get top-level OU first (Root -> Leaf)
     ou_parts.reverse()
     
     # Join OUs with forward slash
@@ -52,6 +107,7 @@ def get_ldap_config():
         'use_samaccountname': os.getenv('LDAP_USE_SAMACCOUNTNAME', 'false').lower() == 'true',
         'use_samaccountname_only': os.getenv('LDAP_USE_SAMACCOUNTNAME_ONLY', 'false').lower() == 'true',
         'use_ou_structure': os.getenv('LDAP_USE_OU_STRUCTURE', 'false').lower() == 'true',
+        'use_ou_description': os.getenv('LDAP_USE_OU_DESCRIPTION', 'false').lower() == 'true',
         'use_supervisor_groups': os.getenv('TIMECAMP_USE_SUPERVISOR_GROUPS', 'false').lower() == 'true',
         'use_real_email_as_email': os.getenv('LDAP_USE_REAL_EMAIL_AS_EMAIL', 'false').lower() == 'true',
         'use_windows_login_email': os.getenv('LDAP_USE_WINDOWS_LOGIN_EMAIL', 'false').lower() == 'true',
@@ -264,11 +320,11 @@ def select_email_from_domain(email_string, preferred_domain):
     logger.debug(f"No email found for domain {preferred_domain}, using first email: {emails[0]}")
     return emails[0]
 
-def get_department_value(user_attrs, dn, use_ou_structure):
+def get_department_value(user_attrs, dn, use_ou_structure, ldap_connection=None, use_ou_description=False, ou_description_cache=None):
     """Determine department value based on configuration."""
     if use_ou_structure:
         # Use OU path from DN as department
-        department = extract_ou_path(dn)
+        department = extract_ou_path(dn, ldap_connection, use_ou_description, ou_description_cache)
     else:
         # Use department attribute
         department = normalize_text(user_attrs.get('department', ''))
@@ -385,6 +441,7 @@ def search_ldap_users(ldap_connection, config):
     
     users = []
     manager_guid_cache = {}  # Cache to store manager GUIDs
+    ou_description_cache = {}  # Cache to store OU descriptions
     
     while True:
         # Search with the pagination control
@@ -420,7 +477,10 @@ def search_ldap_users(ldap_connection, config):
                     manager_id = get_manager_guid(ldap_connection, user_attrs['manager'], manager_guid_cache)
                 
                 # Determine department value based on configuration
-                department = get_department_value(user_attrs, dn, config['use_ou_structure'])
+                department = get_department_value(
+                    user_attrs, dn, config['use_ou_structure'],
+                    ldap_connection, config['use_ou_description'], ou_description_cache
+                )
                 
                 # Create transformed user object
                 transformed_user = create_user_object(user_attrs, manager_id, department, config)
@@ -449,9 +509,9 @@ def search_ldap_users(ldap_connection, config):
                 logger.warning("Size limit exceeded. Consider reducing LDAP_PAGE_SIZE in .env")
             raise
     
-    return users, manager_guid_cache
+    return users, manager_guid_cache, ou_description_cache
 
-def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache):
+def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache, ou_description_cache):
     """Fetch supervisors that are referenced but not downloaded in the initial search."""
     if not config['use_supervisor_groups']:
         return []
@@ -508,7 +568,10 @@ def fetch_missing_supervisors(ldap_connection, config, users, manager_guid_cache
                             manager_id = get_manager_guid(ldap_connection, processed_attrs['manager'], manager_guid_cache)
                         
                         # Determine department
-                        department = get_department_value(processed_attrs, supervisor_dn, config['use_ou_structure'])
+                        department = get_department_value(
+                            processed_attrs, supervisor_dn, config['use_ou_structure'],
+                            ldap_connection, config['use_ou_description'], ou_description_cache
+                        )
                         
                         # Create supervisor object
                         supervisor = create_user_object(processed_attrs, manager_id, department, config)
@@ -545,14 +608,14 @@ def fetch_ldap_users():
         
         try:
             # Search for users
-            users, manager_guid_cache = search_ldap_users(ldap_connection, config)
+            users, manager_guid_cache, ou_description_cache = search_ldap_users(ldap_connection, config)
             
             logger.info(f"Initial users fetched: {len(users)}")
             
             # Fetch missing supervisors if supervisor groups are enabled
             if config['use_supervisor_groups']:
                 missing_supervisors = fetch_missing_supervisors(
-                    ldap_connection, config, users, manager_guid_cache
+                    ldap_connection, config, users, manager_guid_cache, ou_description_cache
                 )
                 
                 # Add missing supervisors to users list

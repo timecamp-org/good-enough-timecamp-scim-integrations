@@ -92,6 +92,8 @@ Common environment variables
   value: {{ .disableNewUsers | quote }}
 - name: TIMECAMP_DISABLE_EXTERNAL_ID_SYNC
   value: {{ .disableExternalIdSync | quote }}
+- name: TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC
+  value: {{ .disableAdditionalEmailSync | quote }}
 - name: TIMECAMP_DISABLE_MANUAL_USER_UPDATES
   value: {{ .disableManualUserUpdates | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME_USERS

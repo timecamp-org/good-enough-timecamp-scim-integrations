@@ -16,6 +16,7 @@ class TimeCampConfig:
     use_department_groups: bool
     disable_new_users: bool
     disable_external_id_sync: bool
+    disable_additional_email_sync: bool
     disable_manual_user_updates: bool
     disable_group_updates: bool
     disable_role_updates: bool
@@ -48,6 +49,7 @@ class TimeCampConfig:
         use_department_groups = os.getenv('TIMECAMP_USE_DEPARTMENT_GROUPS', 'true').lower() == 'true'
         disable_new_users = os.getenv('TIMECAMP_DISABLE_NEW_USERS', 'false').lower() == 'true'
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
+        disable_additional_email_sync = os.getenv('TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
         disable_group_updates = os.getenv('TIMECAMP_DISABLE_GROUP_UPDATES', 'false').lower() == 'true'
         disable_role_updates = os.getenv('TIMECAMP_DISABLE_ROLE_UPDATES', 'false').lower() == 'true'
@@ -76,6 +78,7 @@ class TimeCampConfig:
             use_department_groups=use_department_groups,
             disable_new_users=disable_new_users,
             disable_external_id_sync=disable_external_id_sync,
+            disable_additional_email_sync=disable_additional_email_sync,
             disable_manual_user_updates=disable_manual_user_updates,
             disable_group_updates=disable_group_updates,
             disable_role_updates=disable_role_updates,

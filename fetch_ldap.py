@@ -32,76 +32,61 @@ def extract_ou_path(dn, ldap_connection=None, use_description=False, ou_descript
     # Split the DN into parts
     parts = dn.split(',')
     
-    # Extract OUs (skip the first part as it's the user CN)
+    # Extract OUs
     ou_parts = []
-    ou_dns = []  # Store full DN for each OU for lookup
     
-    for part in parts:
-        if part.strip().lower().startswith('ou='):
-            # Remove the 'OU=' prefix and extract the OU name
-            ou_name = part.strip()[3:]
-            ou_parts.append(ou_name)
-            ou_dns.append(part.strip())
-    
-    # Reverse the order to get top-level OU first
-    ou_parts.reverse()
-    ou_dns.reverse()
-    
-    # If use_description is enabled, replace OU names with descriptions
-    if use_description and ldap_connection and ou_description_cache is not None:
-        # Reconstruct the DN for each OU level to query its description
-        dn_parts = dn.split(',')
-        dn_parts.reverse()  # Start from the rightmost (top-level) part
-        
-        final_ou_parts = []
-        for i, ou_name in enumerate(ou_parts):
-            # Build the full DN for this OU
-            ou_dn = ','.join(dn_parts[-(i+1):])
+    for i, part in enumerate(parts):
+        clean_part = part.strip()
+        if clean_part.lower().startswith('ou='):
+            # Extract the OU name (remove 'OU=' prefix)
+            ou_name = clean_part[3:]
+            final_ou_name = ou_name
             
-            # Check cache first
-            if ou_dn in ou_description_cache:
-                description = ou_description_cache[ou_dn]
-                if description:
-                    final_ou_parts.append(description)
+            # If use_description is enabled, try to replace OU name with description
+            if use_description and ldap_connection and ou_description_cache is not None:
+                # Reconstruct the full DN for this OU
+                # The DN for an OU at index i consists of parts from i to the end
+                ou_dn = ','.join([p.strip() for p in parts[i:]])
+                
+                # Check cache first
+                if ou_dn in ou_description_cache:
+                    description = ou_description_cache[ou_dn]
+                    if description:
+                        final_ou_name = description
                 else:
-                    final_ou_parts.append(ou_name)  # Fall back to CN if no description
-            else:
-                # Query LDAP for the OU's description
-                try:
-                    ou_result = ldap_connection.search_s(
-                        ou_dn,
-                        ldap.SCOPE_BASE,
-                        '(objectClass=*)',
-                        ['description']
-                    )
-                    
-                    if ou_result and len(ou_result) > 0 and len(ou_result[0]) > 1:
-                        ou_attrs = ou_result[0][1]
+                    # Query LDAP for the OU's description
+                    try:
+                        ou_result = ldap_connection.search_s(
+                            ou_dn,
+                            ldap.SCOPE_BASE,
+                            '(objectClass=*)',
+                            ['description']
+                        )
+                        
                         description = ""
-                        if 'description' in ou_attrs and ou_attrs['description']:
-                            description_value = ou_attrs['description'][0]
-                            if isinstance(description_value, bytes):
-                                description = description_value.decode('utf-8')
-                            else:
-                                description = description_value
+                        if ou_result and len(ou_result) > 0 and len(ou_result[0]) > 1:
+                            ou_attrs = ou_result[0][1]
+                            if 'description' in ou_attrs and ou_attrs['description']:
+                                description_value = ou_attrs['description'][0]
+                                if isinstance(description_value, bytes):
+                                    description = description_value.decode('utf-8')
+                                else:
+                                    description = description_value
                         
                         # Cache the result
                         ou_description_cache[ou_dn] = description
                         
                         if description:
-                            final_ou_parts.append(description)
-                        else:
-                            final_ou_parts.append(ou_name)  # Fall back to CN
-                    else:
+                            final_ou_name = description
+                            
+                    except Exception as e:
+                        logger.warning(f"Error retrieving OU description for {ou_dn}: {str(e)}")
                         ou_description_cache[ou_dn] = ""
-                        final_ou_parts.append(ou_name)
-                        
-                except Exception as e:
-                    logger.warning(f"Error retrieving OU description for {ou_dn}: {str(e)}")
-                    ou_description_cache[ou_dn] = ""
-                    final_ou_parts.append(ou_name)  # Fall back to CN
-        
-        return '/'.join(final_ou_parts)
+            
+            ou_parts.append(final_ou_name)
+    
+    # Reverse the order to get top-level OU first (Root -> Leaf)
+    ou_parts.reverse()
     
     # Join OUs with forward slash
     return '/'.join(ou_parts)

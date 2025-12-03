@@ -298,26 +298,17 @@ class TimeCampSynchronizer:
         else:
             logger.debug(f"Skipping role update for user {email} due to disable_role_updates config")
         
-        # # Check if user needs to be re-enabled
-        # # Force check fresh status
-        # fresh_settings = self.api.get_user_settings([user_id], 'disabled_user')
-        # disabled_setting = fresh_settings.get(user_id)
-        
-        # # Determine if user is effectively disabled using both sources of truth
-        # # If API returns explicit '1', they are disabled.
-        # # If API returns None, fallback to what we saw in the initial list (is_enabled=False means disabled)
-        # is_disabled = str(disabled_setting) == '1' or (disabled_setting is None and not existing_user.get('is_enabled', True))
-        
-        # if is_disabled:
-        #     if not dry_run:
-        #         logger.info(f"Re-enabling user {email}")
-        #         self.api.update_user_setting(user_id, 'disabled_user', '0')
-        #         # Always set added_manually=0 when re-enabling
-        #         logger.info(f"Setting added_manually=0 for user {email} after re-enabling")
-        #         self.api.update_user_setting(user_id, 'added_manually', '0')
-        #     else:
-        #         logger.info(f"[DRY RUN] Would re-enable user {email}")
-        #         logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after re-enabling")
+        # Check if user needs to be re-enabled (using already-fetched is_enabled status)
+        if not existing_user.get('is_enabled', True):
+            if not dry_run:
+                logger.info(f"Re-enabling user {email}")
+                self.api.update_user_setting(user_id, 'disabled_user', '0')
+                # Always set added_manually=0 when re-enabling
+                logger.info(f"Setting added_manually=0 for user {email} after re-enabling")
+                self.api.update_user_setting(user_id, 'added_manually', '0')
+            else:
+                logger.info(f"[DRY RUN] Would re-enable user {email}")
+                logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after re-enabling")
 
         # Apply updates
         if updates:

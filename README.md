@@ -113,10 +113,9 @@ AZURE_PREFER_REAL_EMAIL=true
 ## Not Yet Implemented
 
 - Setting to sync only selected things (like only new users)
-- Setting to move disabled users to specific group_id
 - Change of email (use external_id to identify user)
 - Refactor deparments and use array instead of string
-- Unit tests!
+- Unit tests and integration tests!
 
 ## Test Cases
 
@@ -143,6 +142,9 @@ AZURE_PREFER_REAL_EMAIL=true
    - User E (no supervisor, not a supervisor) → root group id
 - Remove empty groups
 - S3-compatible storage for JSON files ✅
+- Move disabled users to specific group (TIMECAMP_DISABLED_USERS_GROUP_ID) ✅
+- Re-enable disabled users ✅
+- Set added_manually=0 for user after any update to ensure proper tracking ✅
 
 ## Docker Support
 
@@ -172,6 +174,9 @@ docker compose run --rm sync-users --debug
 
 # HTTP Service (run scripts via REST API on port 8181)
 docker compose up -d http-service
+
+# Sample sync command
+docker compose run --rm fetch-ldap && docker compose run --rm prepare-timecamp && docker compose run --rm sync-users --debug
 ```
 
 ## License

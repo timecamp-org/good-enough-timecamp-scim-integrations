@@ -16,6 +16,7 @@ class TimeCampConfig:
     use_department_groups: bool
     disable_new_users: bool
     disable_external_id_sync: bool
+    disable_additional_email_sync: bool
     disable_manual_user_updates: bool
     disable_group_updates: bool
     disable_role_updates: bool
@@ -24,6 +25,7 @@ class TimeCampConfig:
     use_job_title_name_groups: bool
     replace_email_domain: str
     use_is_supervisor_role: bool
+    disabled_users_group_id: int
 
     @classmethod
     def from_env(cls) -> 'TimeCampConfig':
@@ -47,6 +49,7 @@ class TimeCampConfig:
         use_department_groups = os.getenv('TIMECAMP_USE_DEPARTMENT_GROUPS', 'true').lower() == 'true'
         disable_new_users = os.getenv('TIMECAMP_DISABLE_NEW_USERS', 'false').lower() == 'true'
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
+        disable_additional_email_sync = os.getenv('TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
         disable_group_updates = os.getenv('TIMECAMP_DISABLE_GROUP_UPDATES', 'false').lower() == 'true'
         disable_role_updates = os.getenv('TIMECAMP_DISABLE_ROLE_UPDATES', 'false').lower() == 'true'
@@ -55,6 +58,7 @@ class TimeCampConfig:
         use_job_title_name_groups = os.getenv('TIMECAMP_USE_JOB_TITLE_NAME_GROUPS', 'false').lower() == 'true'
         replace_email_domain = os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', '').strip()
         use_is_supervisor_role = os.getenv('TIMECAMP_USE_IS_SUPERVISOR_ROLE', 'false').lower() == 'true'
+        disabled_users_group_id = int(os.getenv('TIMECAMP_DISABLED_USERS_GROUP_ID', '0'))
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -74,6 +78,7 @@ class TimeCampConfig:
             use_department_groups=use_department_groups,
             disable_new_users=disable_new_users,
             disable_external_id_sync=disable_external_id_sync,
+            disable_additional_email_sync=disable_additional_email_sync,
             disable_manual_user_updates=disable_manual_user_updates,
             disable_group_updates=disable_group_updates,
             disable_role_updates=disable_role_updates,
@@ -81,7 +86,8 @@ class TimeCampConfig:
             use_job_title_name_users=use_job_title_name_users,
             use_job_title_name_groups=use_job_title_name_groups,
             replace_email_domain=replace_email_domain,
-            use_is_supervisor_role=use_is_supervisor_role
+            use_is_supervisor_role=use_is_supervisor_role,
+            disabled_users_group_id=disabled_users_group_id
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

@@ -298,6 +298,18 @@ class TimeCampSynchronizer:
         else:
             logger.debug(f"Skipping role update for user {email} due to disable_role_updates config")
         
+        # Check if user needs to be re-enabled (using already-fetched is_enabled status)
+        if not existing_user.get('is_enabled', True):
+            if not dry_run:
+                logger.info(f"Re-enabling user {email}")
+                self.api.update_user_setting(user_id, 'disabled_user', '0')
+                # Always set added_manually=0 when re-enabling
+                logger.info(f"Setting added_manually=0 for user {email} after re-enabling")
+                self.api.update_user_setting(user_id, 'added_manually', '0')
+            else:
+                logger.info(f"[DRY RUN] Would re-enable user {email}")
+                logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after re-enabling")
+
         # Apply updates
         if updates:
             if not dry_run:
@@ -312,7 +324,7 @@ class TimeCampSynchronizer:
                 logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after update")
         
         # Handle additional email
-        if 'timecamp_real_email' in tc_user_data:
+        if 'timecamp_real_email' in tc_user_data and not self.config.disable_additional_email_sync:
             current_add_email = additional_emails.get(user_id)
             if current_add_email != tc_user_data['timecamp_real_email']:
                 if not dry_run:
@@ -417,8 +429,16 @@ class TimeCampSynchronizer:
                 if not dry_run:
                     logger.info(f"Deactivating user {email} ({reason})")
                     self.api.update_user_setting(user_id, 'disabled_user', '1')
+                    
+                    # Move to disabled users group if configured
+                    if self.config.disabled_users_group_id > 0:
+                        logger.info(f"Moving deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
+                        self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
+
                 else:
                     logger.info(f"[DRY RUN] Would deactivate user {email} ({reason})")
+                    if self.config.disabled_users_group_id > 0:
+                        logger.info(f"[DRY RUN] Would move deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
     
     def _finalize_new_users(self) -> None:
         """Apply final settings to newly created users."""
@@ -507,6 +527,7 @@ def main():
         logger.debug(f"Disable group updates: {config.disable_group_updates}")
         logger.debug(f"Disable role updates: {config.disable_role_updates}")
         logger.debug(f"Disable groups creation: {config.disable_groups_creation}")
+        logger.debug(f"Disabled users group ID: {config.disabled_users_group_id}")
         logger.debug(f"Ignored user IDs: {config.ignored_user_ids}")
         
         # Check if input file exists

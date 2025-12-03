@@ -153,6 +153,7 @@ config:
     useDepartmentGroups: true
     disableNewUsers: false
     disableExternalIdSync: false
+    disableAdditionalEmailSync: false
     disableManualUserUpdates: false
     useJobTitleNameUsers: false
     useJobTitleNameGroups: false

@@ -53,6 +53,7 @@ services:
       - LDAP_PAGE_SIZE=${LDAP_PAGE_SIZE:-1000}
       - LDAP_USE_SAMACCOUNTNAME=${LDAP_USE_SAMACCOUNTNAME:-false}
       - LDAP_USE_OU_STRUCTURE=${LDAP_USE_OU_STRUCTURE:-false}
+      - LDAP_USE_OU_DESCRIPTION=${LDAP_USE_OU_DESCRIPTION:-false}
       - LDAP_USE_REAL_EMAIL_AS_EMAIL=${LDAP_USE_REAL_EMAIL_AS_EMAIL:-false}
       - LDAP_USE_WINDOWS_LOGIN_EMAIL=${LDAP_USE_WINDOWS_LOGIN_EMAIL:-false}
       - LDAP_EMAIL_DOMAIN=${LDAP_EMAIL_DOMAIN:-}
@@ -89,7 +90,8 @@ services:
     
   sync-users:
     extends: timecamp-scim
-    command: ["python", "timecamp_sync_users.py"]
+    entrypoint: ["python", "timecamp_sync_users.py"]
+    command: []
     
   sync-time-off:
     extends: timecamp-scim
@@ -115,4 +117,4 @@ services:
 networks:
   timecamp-scim-network:
     driver: bridge
-    internal: true 
+    # internal: true 

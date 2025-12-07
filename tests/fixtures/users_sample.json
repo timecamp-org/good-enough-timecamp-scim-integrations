@@ -1,0 +1,72 @@
+{
+  "users": [
+    {
+      "external_id": "4cad0742-018e-4cbd-81d1-7ea7137417c8",
+      "name": "Test1",
+      "email": "test.test1",
+      "department": "tc2minisync/test1",
+      "job_title": "",
+      "status": "active",
+      "supervisor_id": ""
+    },
+    {
+      "external_id": "2ed37c89-2fcb-4ebe-a06b-870b967fd930",
+      "name": "Kamil Rudnicki",
+      "email": "test.test2",
+      "department": "tc2minisync/test1/test1_1",
+      "job_title": "",
+      "status": "active",
+      "supervisor_id": "",
+      "real_email": "asdv@fq3fcq34c.pl"
+    },
+    {
+      "external_id": "df9313cf-cee2-4ed6-9887-87a5d7088b39",
+      "name": "Test3",
+      "email": "test.test3",
+      "department": "tc2minisync/test1/test1_1/test1_1_1",
+      "job_title": "",
+      "status": "active",
+      "supervisor_id": "2ed37c89-2fcb-4ebe-a06b-870b967fd930"
+    },
+    {
+      "external_id": "4d64d7eb-de10-4c10-9e71-1da35c225d78",
+      "name": "Test4",
+      "email": "test.test4",
+      "department": "tc2minisync/test1/test1_1/test1_1_1/test1_1_1_1_descTEST-123",
+      "job_title": "",
+      "status": "active",
+      "supervisor_id": "df9313cf-cee2-4ed6-9887-87a5d7088b39",
+      "real_email": "test4@test.test"
+    },
+    {
+      "external_id": "97d2ce9c-a64b-4aae-9488-bb6f39857f6e",
+      "name": "Test5",
+      "email": "test.test5",
+      "department": "tc2minisync/test1/test1_1/test1_1_1/test1_1_1_1_descTEST-123/test1_1_1_1_1_description",
+      "job_title": "",
+      "status": "active",
+      "supervisor_id": "",
+      "real_email": "test5niedziala@test.com"
+    },
+    {
+      "external_id": "d6f873f4-c5c9-4107-bbb9-0b771b4736e6",
+      "name": "user1test",
+      "email": "user1test",
+      "department": "tc2minisync/test1",
+      "job_title": "HR Manager",
+      "status": "active",
+      "supervisor_id": "",
+      "real_email": "user1test@test.pl"
+    },
+    {
+      "external_id": "934e177c-7402-4019-a015-a6ea9f43a334",
+      "name": "tc2sync",
+      "email": "tc2sync",
+      "department": "tc2minisync",
+      "job_title": "Developer",
+      "status": "active",
+      "supervisor_id": ""
+    }
+  ]
+}
+

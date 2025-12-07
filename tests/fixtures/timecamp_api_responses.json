@@ -1,0 +1,104 @@
+{
+  "users": [
+    {
+      "user_id": "1001",
+      "email": "test.test1",
+      "display_name": "Test1",
+      "group_id": "100",
+      "is_enabled": true
+    },
+    {
+      "user_id": "1002",
+      "email": "test.test2",
+      "display_name": "Kamil Rudnicki",
+      "group_id": "101",
+      "is_enabled": true
+    },
+    {
+      "user_id": "1003",
+      "email": "test.test3",
+      "display_name": "Test3",
+      "group_id": "102",
+      "is_enabled": true
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "100",
+      "name": "tc2minisync",
+      "parent_id": "0"
+    },
+    {
+      "group_id": "101",
+      "name": "test1",
+      "parent_id": "100"
+    },
+    {
+      "group_id": "102",
+      "name": "test1_1",
+      "parent_id": "101"
+    }
+  ],
+  "day_types": {
+    "data": [
+      {
+        "id": "1",
+        "name": "Vacation",
+        "isDayOff": false
+      },
+      {
+        "id": "2",
+        "name": "Sick Leave",
+        "isDayOff": true
+      },
+      {
+        "id": "3",
+        "name": "Public Holiday",
+        "isDayOff": true
+      }
+    ]
+  },
+  "add_user_response": {
+    "user_id": "1004",
+    "email": "newuser@example.com"
+  },
+  "add_group_response": {
+    "group_id": "103"
+  },
+  "user_settings": {
+    "1001": [
+      {
+        "name": "additional_email",
+        "value": "test1@real.com"
+      },
+      {
+        "name": "external_id",
+        "value": "4cad0742-018e-4cbd-81d1-7ea7137417c8"
+      },
+      {
+        "name": "added_manually",
+        "value": "0"
+      },
+      {
+        "name": "disabled_user",
+        "value": "0"
+      }
+    ]
+  },
+  "people_picker": {
+    "groups": {
+      "100": {
+        "group_id": "100",
+        "users": {
+          "1001": {
+            "role_id": "3"
+          },
+          "1002": {
+            "role_id": "2"
+          }
+        }
+      }
+    }
+  }
+}
+

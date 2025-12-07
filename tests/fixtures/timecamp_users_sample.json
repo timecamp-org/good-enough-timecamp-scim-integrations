@@ -1,0 +1,45 @@
+[
+  {
+    "timecamp_external_id": "4cad0742-018e-4cbd-81d1-7ea7137417c8",
+    "timecamp_user_name": "Test1",
+    "timecamp_email": "test.test1",
+    "timecamp_groups_breadcrumb": "tc2minisync/test1",
+    "timecamp_status": "active",
+    "timecamp_role": "user"
+  },
+  {
+    "timecamp_external_id": "2ed37c89-2fcb-4ebe-a06b-870b967fd930",
+    "timecamp_user_name": "Kamil Rudnicki",
+    "timecamp_email": "test.test2",
+    "timecamp_groups_breadcrumb": "tc2minisync/test1/test1_1",
+    "timecamp_status": "active",
+    "timecamp_role": "user",
+    "timecamp_real_email": "asdv@fq3fcq34c.pl"
+  },
+  {
+    "timecamp_external_id": "df9313cf-cee2-4ed6-9887-87a5d7088b39",
+    "timecamp_user_name": "Test3",
+    "timecamp_email": "test.test3",
+    "timecamp_groups_breadcrumb": "tc2minisync/test1/test1_1/test1_1_1",
+    "timecamp_status": "active",
+    "timecamp_role": "supervisor"
+  },
+  {
+    "timecamp_external_id": "d6f873f4-c5c9-4107-bbb9-0b771b4736e6",
+    "timecamp_user_name": "HR Manager [user1test]",
+    "timecamp_email": "user1test",
+    "timecamp_groups_breadcrumb": "tc2minisync/test1",
+    "timecamp_status": "active",
+    "timecamp_role": "user",
+    "timecamp_real_email": "user1test@test.pl"
+  },
+  {
+    "timecamp_external_id": "934e177c-7402-4019-a015-a6ea9f43a334",
+    "timecamp_user_name": "Developer [tc2sync]",
+    "timecamp_email": "tc2sync",
+    "timecamp_groups_breadcrumb": "tc2minisync",
+    "timecamp_status": "active",
+    "timecamp_role": "user"
+  }
+]
+

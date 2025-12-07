@@ -16,6 +16,50 @@ def normalize_text(text):
     # Convert any escaped Unicode to proper characters
     return text
 
+
+def transform_azure_user_to_schema(user: dict, prefer_real_email: bool = False) -> dict:
+    """
+    Transform an Azure AD user object to our internal schema.
+    
+    Args:
+        user: Azure AD user object from Graph API
+        prefer_real_email: If True, prefer 'mail' field over 'userPrincipalName'
+        
+    Returns:
+        Transformed user dictionary matching our schema
+    """
+    user_id = user.get('id')
+    
+    # Handle email based on preference setting
+    mail = user.get('mail')
+    user_principal_name = user.get('userPrincipalName')
+    
+    if prefer_real_email:
+        # Prefer mail, but fall back to userPrincipalName if mail is not available
+        email = mail if mail else user_principal_name
+    else:
+        # Always use userPrincipalName (federated ID) as the primary email
+        email = user_principal_name
+    
+    # Properly handle Polish characters in names
+    display_name = normalize_text(user.get('displayName', '').strip())
+    
+    # Extract manager ID correctly
+    manager = user.get('manager', {})
+    manager_id = manager.get('id', '') if manager else ''
+    
+    transformed_user = {
+        "external_id": user_id,
+        "name": display_name,
+        "email": email.lower() if email else "",
+        "department": normalize_text(user.get('department', '')),
+        "job_title": normalize_text(user.get('jobTitle', '')),
+        "status": "active",  # Graph API doesn't directly expose this in the same way
+        "supervisor_id": manager_id,
+    }
+    
+    return transformed_user
+
 class AzureTokenManager:
     def __init__(self):
         """Initialize the token manager with configuration from environment variables."""
@@ -382,34 +426,7 @@ def fetch_azure_users():
                 if filter_groups and user_id not in filtered_user_ids:
                     continue
                 
-                # Handle email based on preference setting
-                mail = user.get('mail')
-                user_principal_name = user.get('userPrincipalName')
-                
-                if prefer_real_email:
-                    # Prefer mail, but fall back to userPrincipalName if mail is not available
-                    email = mail if mail else user_principal_name
-                else:
-                    # Always use userPrincipalName (federated ID) as the primary email
-                    email = user_principal_name
-                
-                # Properly handle Polish characters in names
-                display_name = normalize_text(user.get('displayName', '').strip())
-                
-                # Extract manager ID correctly
-                manager = user.get('manager', {})
-                manager_id = manager.get('id', '') if manager else ''
-                
-                transformed_user = {
-                    "external_id": user_id,
-                    "name": display_name,
-                    "email": email.lower(),
-                    "department": normalize_text(user.get('department', '')),
-                    "job_title": normalize_text(user.get('jobTitle', '')),
-                    "status": "active",  # Graph API doesn't directly expose this in the same way
-                    "supervisor_id": manager_id,
-                }
-                
+                transformed_user = transform_azure_user_to_schema(user, prefer_real_email)
                 users.append(transformed_user)
             
             # Check if there are more pages

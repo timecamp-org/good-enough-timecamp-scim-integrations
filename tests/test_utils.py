@@ -298,3 +298,18 @@ class TestIntegration:
         assert ")" not in cleaned
         assert "Engineering Main" in cleaned
 
+
+class TestIntentionalFailure:
+    """Test that intentionally fails for demonstration purposes."""
+    
+    def test_this_should_fail(self):
+        """This test is designed to fail intentionally."""
+        # This assertion will always fail
+        assert 1 == 2, "This test is intentionally broken: 1 does not equal 2"
+    
+    def test_another_failing_test(self):
+        """Another test that will fail."""
+        expected_value = "expected"
+        actual_value = "actual"
+        assert expected_value == actual_value, f"Values don't match: expected '{expected_value}', got '{actual_value}'"
+

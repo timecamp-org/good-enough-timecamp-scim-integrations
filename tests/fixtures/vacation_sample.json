@@ -1,0 +1,23 @@
+{
+  "vacation": [
+    {
+      "email": "test.test1",
+      "start_on": "2024-01-15",
+      "finish_on": "2024-01-19",
+      "tc_leave_type": "Vacation"
+    },
+    {
+      "email": "test.test2",
+      "start_on": "2024-02-01",
+      "finish_on": "2024-02-02",
+      "tc_leave_type": "Sick Leave"
+    },
+    {
+      "email": "user1test",
+      "start_on": "2024-03-10",
+      "finish_on": "2024-03-15",
+      "tc_leave_type": "Vacation"
+    }
+  ]
+}
+

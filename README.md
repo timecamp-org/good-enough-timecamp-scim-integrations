@@ -110,12 +110,51 @@ AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
 AZURE_PREFER_REAL_EMAIL=true
 ```
 
+## Testing
+
+This project includes comprehensive automated tests for all major components.
+
+### Running Tests
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=. --cov-report=html
+
+# Run specific test file
+pytest tests/test_sync_users.py
+
+# Run tests in parallel
+pytest -n auto
+```
+
+### Test Coverage
+
+The test suite covers:
+- Azure AD user fetching and transformation
+- Data preparation and role determination
+- Supervisor group processing
+- TimeCamp user synchronization
+- Time off synchronization
+- API wrapper functionality
+- Common utilities
+
+See [tests/README.md](tests/README.md) for detailed testing documentation.
+
+### Continuous Integration
+
+Tests are designed to run in CI/CD environments with full mocking of external APIs, ensuring fast and reliable test execution without requiring access to live services.
+
 ## Not Yet Implemented
 
 - Setting to sync only selected things (like only new users)
 - Change of email (use external_id to identify user)
 - Refactor deparments and use array instead of string
-- Unit tests and integration tests!
 
 ## Test Cases
 

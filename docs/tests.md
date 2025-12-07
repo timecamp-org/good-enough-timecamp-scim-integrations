@@ -176,16 +176,18 @@ tests/
 
 ### Test Coverage by Component
 
-| Component | Test File | Coverage |
-|-----------|-----------|----------|
-| TimeCamp API | `test_api.py` | 88% |
-| Azure AD Fetch | `test_fetch_azuread.py` | 64% |
-| Data Preparation | `test_prepare_timecamp.py` | 46% |
-| Supervisor Groups | `test_supervisor_groups.py` | 75% |
-| User Sync | `test_sync_users.py` | 71% |
-| Time Off Sync | `test_sync_time_off.py` | 86% |
-| Utilities | `test_utils.py` | 100% |
-| Configuration | `test_config_integration.py` | 100% |
+| Component | Test File | Tests | Coverage |
+|-----------|-----------|-------|----------|
+| TimeCamp API | `test_api.py` | 22 | 88% |
+| Azure AD Fetch | `test_fetch_azuread.py` | 22 | 64% |
+| Data Preparation | `test_prepare_timecamp.py` | 32 | 47% |
+| Supervisor Groups | `test_supervisor_groups.py` | 21 | 75% |
+| User Sync | `test_sync_users.py` | 21 | 71% |
+| Time Off Sync | `test_sync_time_off.py` | 9 | 86% |
+| Utilities | `test_utils.py` | 31 | 100% |
+| Configuration | `test_config_integration.py` | 35 | 100% |
+| Pipeline Integration | `test_pipeline_integration.py` | 19 | - |
+| **Total** | **9 test files** | **214** | **46%** |
 
 ## Writing Tests
 
@@ -597,9 +599,58 @@ When adding new features:
 5. Update this documentation if needed
 6. Run tests in CI before merging
 
+## Pipeline Integration Tests
+
+The `test_pipeline_integration.py` file contains end-to-end tests that verify the complete data transformation pipeline from `users.json` to `timecamp_users.json` for various configuration scenarios.
+
+### Running Pipeline Tests
+
+```bash
+# Run all pipeline tests
+pytest tests/test_pipeline_integration.py -v
+
+# Run specific scenario
+pytest tests/test_pipeline_integration.py::TestPipelineComplexScenarios::test_full_featured_hybrid_scenario -v
+```
+
+### Pipeline Test Scenarios
+
+1. **Basic Configurations**
+   - Department-only mode
+   - Supervisor-only mode
+   - Hybrid mode
+
+2. **User Name Formatting**
+   - Show external ID in names
+   - Job titles in user names
+   - Job titles in group names
+
+3. **Email Handling**
+   - Email domain replacement
+   - Real email field handling
+
+4. **Department Handling**
+   - Skip single department prefix
+   - Skip multi-level prefixes
+   - Skip multiple prefix options
+
+5. **Role Handling**
+   - Force global admin role
+   - Force supervisor role
+   - is_supervisor boolean field
+
+6. **Status Handling**
+   - Active/inactive users
+
+7. **Complex Real-World Scenarios**
+   - LDAP OU structure with skip departments
+   - Full-featured hybrid mode with all options
+   - Output sorting verification
+   - Required fields validation
+
 ---
 
 **Last Updated:** December 2024  
 **Test Suite Version:** 1.0  
-**Total Tests:** 200+ tests covering all major components
+**Total Tests:** 214 tests covering all major components and configurations
 

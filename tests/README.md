@@ -102,49 +102,72 @@ This shows print statements and logging output.
 
 ## Test Organization
 
-### Test Files
+### Test Files (214 total tests)
 
-- `test_fetch_azuread.py` - Azure AD integration tests
+- `test_fetch_azuread.py` - Azure AD integration tests (22 tests)
   - Token management
   - User data transformation
   - Group filtering
   - Pagination handling
 
-- `test_prepare_timecamp.py` - Data preparation tests
+- `test_prepare_timecamp.py` - Data preparation tests (32 tests)
   - Role determination logic
   - Email domain replacement
   - Group path processing
   - Job title formatting
 
-- `test_supervisor_groups.py` - Supervisor hierarchy tests
+- `test_supervisor_groups.py` - Supervisor hierarchy tests (21 tests)
   - Supervisor path building
   - Hybrid mode (department + supervisor)
   - Department-only mode
   - Supervisor-only mode
 
-- `test_sync_users.py` - User synchronization tests
+- `test_sync_users.py` - User synchronization tests (21 tests)
   - Group structure synchronization
   - User creation and updates
   - User deactivation
   - Additional email handling
   - External ID synchronization
 
-- `test_sync_time_off.py` - Time off synchronization tests
+- `test_sync_time_off.py` - Time off synchronization tests (9 tests)
   - Vacation entry parsing
   - Leave type matching
   - Date range iteration
   - Should-be time calculation
 
-- `test_api.py` - API wrapper tests
+- `test_api.py` - API wrapper tests (22 tests)
   - Request construction
   - Retry logic
   - Batch operations
   - Error handling
 
-- `test_utils.py` - Utility function tests
+- `test_utils.py` - Utility function tests (31 tests)
   - Configuration loading
   - Name cleaning
   - Department path processing
+
+- `test_config_integration.py` - Configuration integration tests (35 tests)
+  - All TimeCamp configuration options from env.example
+  - Group structure modes (department/supervisor/hybrid)
+  - User name formatting options
+  - Email configurations
+  - Department skip prefixes
+  - All sync disable flags
+  - Role determination configurations
+  - Ignored users and disabled group
+  - Realistic configuration combinations
+
+- `test_pipeline_integration.py` - End-to-end pipeline tests (19 tests)
+  - Complete data transformation: users.json → timecamp_users.json
+  - Verification for each configuration scenario
+  - Basic configurations (department/supervisor/hybrid modes)
+  - User name formatting outputs
+  - Email handling and domain replacement
+  - Department path processing with skip prefixes
+  - Role handling (force admin/supervisor, is_supervisor field)
+  - Status handling (active/inactive)
+  - Complex real-world scenarios (LDAP OU structure, full-featured hybrid)
+  - Output validation (sorting, required fields)
 
 ### Fixtures
 

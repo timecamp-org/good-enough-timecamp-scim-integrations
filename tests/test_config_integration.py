@@ -568,3 +568,5 @@ class TestConfigurationCombinations:
                 assert 2 in config.ignored_user_ids
                 assert 3 in config.ignored_user_ids
 
+
+

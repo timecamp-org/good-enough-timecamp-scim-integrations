@@ -314,3 +314,5 @@ class TestSyncVacations:
         # Should skip entry for unknown user
         mock_timecamp_api.add_vacation.assert_not_called()
 
+
+

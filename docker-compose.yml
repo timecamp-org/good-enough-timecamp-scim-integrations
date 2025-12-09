@@ -117,7 +117,8 @@ services:
     
   display-tree:
     extends: timecamp-scim
-    command: ["python", "scripts/display_timecamp_tree.py", "--file", "var/timecamp_users.json"]
+    entrypoint: ["python", "scripts/display_timecamp_tree.py"]
+    command: []
     
   remove-empty-groups:
     extends: timecamp-scim

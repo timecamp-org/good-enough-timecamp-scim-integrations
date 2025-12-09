@@ -20,6 +20,7 @@ sudo apt install python3-requests python3-dotenv python3-ldap python3-boto3 pyth
 3. Convert the SCIM data format to match TimeCamp's requirements:
    `python prepare_timecamp_json_from_fetch.py`
    `python scripts/display_timecamp_tree.py > var/structure.txt` (Optional: Preview the organizational structure)
+   `python scripts/display_timecamp_tree.py --html var/structure.html` (Optional: Generate HTML visualization)
 4. Upload the transformed data to TimeCamp using TimeCamp REST API:
    `python timecamp_sync_users.py`
 5. Remove any empty organizational groups (optional):
@@ -262,6 +263,9 @@ docker compose up -d http-service
 
 # Sample sync command
 docker compose run --rm fetch-ldap && docker compose run --rm prepare-timecamp && docker compose run --rm sync-users --debug
+
+# Sample visualization command
+docker compose run --rm fetch-ldap && docker compose run --rm prepare-timecamp && docker compose run --rm display-tree --html var/structure.html
 ```
 
 ## License

@@ -384,13 +384,19 @@ def display_tree_structure(users: List[Dict[str, Any]], detailed: bool = False) 
 
 def main():
     """Main function to run the tree display script."""
+    import os
+    
+    # Calculate default file path relative to this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_file = os.path.join(script_dir, '..', 'var', 'timecamp_users.json')
+    
     parser = argparse.ArgumentParser(
-        description="Display TimeCamp group structure from ../var/timecamp_users.json"
+        description="Display TimeCamp group structure from var/timecamp_users.json"
     )
     parser.add_argument(
         "--file", 
-        default="../var/timecamp_users.json",
-        help="Path to the TimeCamp users JSON file (default: ../var/timecamp_users.json)"
+        default=default_file,
+        help=f"Path to the TimeCamp users JSON file (default: {default_file})"
     )
     parser.add_argument(
         "--detailed", 

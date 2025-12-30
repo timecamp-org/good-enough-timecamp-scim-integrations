@@ -6,9 +6,9 @@ from dataclasses import dataclass
 @dataclass
 class TimeCampConfig:
     """Configuration for TimeCamp integration."""
-    api_key: str
+    api_key: Optional[str]
     domain: str
-    root_group_id: int
+    root_group_id: Optional[int]
     ignored_user_ids: Set[int]
     show_external_id: bool
     skip_departments: str
@@ -26,18 +26,24 @@ class TimeCampConfig:
     replace_email_domain: str
     use_is_supervisor_role: bool
     disabled_users_group_id: int
+    exclude_regex: str
 
     @classmethod
-    def from_env(cls) -> 'TimeCampConfig':
-        """Create configuration from environment variables."""
+    def from_env(cls, validate_auth: bool = True) -> 'TimeCampConfig':
+        """
+        Create configuration from environment variables.
+        
+        Args:
+            validate_auth: If True, validate presence of API key and root group ID.
+        """
         load_dotenv()
         
         api_key = os.getenv('TIMECAMP_API_KEY')
-        if not api_key:
+        if validate_auth and not api_key:
             raise ValueError("Missing TIMECAMP_API_KEY environment variable")
             
         root_group_id = os.getenv('TIMECAMP_ROOT_GROUP_ID')
-        if not root_group_id:
+        if validate_auth and not root_group_id:
             raise ValueError("Missing TIMECAMP_ROOT_GROUP_ID environment variable")
             
         # Parse other environment variables
@@ -59,6 +65,7 @@ class TimeCampConfig:
         replace_email_domain = os.getenv('TIMECAMP_REPLACE_EMAIL_DOMAIN', '').strip()
         use_is_supervisor_role = os.getenv('TIMECAMP_USE_IS_SUPERVISOR_ROLE', 'false').lower() == 'true'
         disabled_users_group_id = int(os.getenv('TIMECAMP_DISABLED_USERS_GROUP_ID', '0'))
+        exclude_regex = os.getenv('TIMECAMP_EXCLUDE_REGEX', '').strip()
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -70,7 +77,7 @@ class TimeCampConfig:
         return cls(
             api_key=api_key,
             domain=domain,
-            root_group_id=int(root_group_id),
+            root_group_id=int(root_group_id) if root_group_id else 0,
             ignored_user_ids=ignored_user_ids,
             show_external_id=show_external_id,
             skip_departments=skip_departments,
@@ -87,7 +94,8 @@ class TimeCampConfig:
             use_job_title_name_groups=use_job_title_name_groups,
             replace_email_domain=replace_email_domain,
             use_is_supervisor_role=use_is_supervisor_role,
-            disabled_users_group_id=disabled_users_group_id
+            disabled_users_group_id=disabled_users_group_id,
+            exclude_regex=exclude_regex
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

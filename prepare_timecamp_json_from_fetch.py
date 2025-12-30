@@ -7,6 +7,7 @@ with the final structure ready for TimeCamp synchronization.
 
 import os
 import json
+import re
 import argparse
 from typing import Dict, List, Any, Set, Tuple, Optional
 from dotenv import load_dotenv
@@ -98,10 +99,53 @@ def process_group_path(department: Optional[str], config: TimeCampConfig) -> str
     return department
 
 
+def get_users_to_exclude(users: List[Dict[str, Any]], config: TimeCampConfig) -> Set[str]:
+    """
+    Identify users to exclude based on regex.
+    Returns a set of emails (lowercased) to exclude.
+    """
+    if not config.exclude_regex:
+        return set()
+        
+    logger.info(f"Filtering users with regex: {config.exclude_regex}")
+    
+    excluded_emails = set()
+    excluded_count = 0
+    
+    try:
+        pattern = re.compile(config.exclude_regex)
+    except re.error as e:
+        logger.error(f"Invalid regex pattern provided: {e}")
+        logger.warning("Regex filtering skipped due to invalid pattern")
+        return set()
+
+    for user in users:
+        # Build context string for matching
+        dept = str(user.get('department', '')).replace('"', "'")
+        title = str(user.get('job_title', '')).replace('"', "'")
+        email = str(user.get('email', '')).replace('"', "'")
+        
+        context_string = f'department="{dept}" job_title="{title}" email="{email}"'
+        
+        if pattern.search(context_string):
+            if user.get('email'):
+                excluded_emails.add(user['email'].lower())
+                excluded_count += 1
+                logger.debug(f"Marking user for exclusion: {email} (matched regex)")
+            
+    logger.info(f"Marked {excluded_count} users for exclusion matching regex")
+    return excluded_emails
+
+
 def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) -> List[Dict[str, Any]]:
     """Process source data and prepare the final TimeCamp user structure."""
     # Check if force_supervisor_role exists in the source data
     force_supervisor_exists = check_force_supervisor_exists(source_data)
+    
+    # Identify users to exclude (but keep them for processing structure)
+    excluded_emails = set()
+    if config.exclude_regex and 'users' in source_data:
+        excluded_emails = get_users_to_exclude(source_data['users'], config)
     
     if force_supervisor_exists:
         logger.info("Detected force_supervisor_role in dataset - other supervisor role logic will be disabled")
@@ -121,6 +165,10 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
     timecamp_users = []
     
     for email, user_data in processed_users.items():
+        # Skip excluded users
+        if email in excluded_emails:
+            continue
+
         # Determine status
         status = 'active' if user_data.get('status', '').lower() == 'active' else 'inactive'
         
@@ -179,7 +227,8 @@ def main():
     
     try:
         # Load configuration
-        config = TimeCampConfig.from_env()
+        # For preparation stage, we don't strictly need API credentials as we are just processing local data
+        config = TimeCampConfig.from_env(validate_auth=False)
         logger.info("Loaded configuration from environment")
         
         # Log all configuration options to show they're being considered
@@ -217,6 +266,10 @@ def main():
         if config.replace_email_domain:
             logger.info(f"    → Will replace email domains with: '{config.replace_email_domain}'")
             
+        logger.info(f"  - TIMECAMP_EXCLUDE_REGEX: '{config.exclude_regex}'")
+        if config.exclude_regex:
+            logger.info(f"    → Will exclude users matching regex against format: department=\"DEPT\" job_title=\"TITLE\" email=\"EMAIL\"")
+
         logger.info(f"  - TIMECAMP_USE_IS_SUPERVISOR_ROLE: {config.use_is_supervisor_role}")
         if config.use_is_supervisor_role:
             logger.info("    → Will determine supervisor role from 'is_supervisor' boolean field")

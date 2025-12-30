@@ -9,6 +9,7 @@ from prepare_timecamp_json_from_fetch import (
     replace_email_domain,
     process_group_path,
     prepare_timecamp_users,
+    get_users_to_exclude,
 )
 
 
@@ -420,4 +421,88 @@ class TestPrepareTimeCampUsers:
         
         emails = [u['timecamp_email'] for u in result]
         assert emails == sorted(emails)
+
+
+class TestRegexExclusion:
+    """Tests for regex exclusion logic."""
+
+    def test_no_regex_configured(self, mock_timecamp_config):
+        """Test that users are not filtered when no regex is configured."""
+        mock_timecamp_config.exclude_regex = ""
+        users = [
+            {'email': 'keep@test.com', 'department': 'Dept', 'job_title': 'Title'}
+        ]
+        
+        result = get_users_to_exclude(users, mock_timecamp_config)
+        assert len(result) == 0
+
+    def test_regex_matching_department(self, mock_timecamp_config):
+        """Test exclusion based on department match."""
+        mock_timecamp_config.exclude_regex = r'department="ExcludeMe"'
+        users = [
+            {'email': 'exclude@test.com', 'department': 'ExcludeMe', 'job_title': 'Title'},
+            {'email': 'keep@test.com', 'department': 'KeepMe', 'job_title': 'Title'}
+        ]
+        
+        result = get_users_to_exclude(users, mock_timecamp_config)
+        assert len(result) == 1
+        assert 'exclude@test.com' in result
+
+    def test_regex_matching_job_title(self, mock_timecamp_config):
+        """Test exclusion based on job title match."""
+        mock_timecamp_config.exclude_regex = r'job_title="ExcludeTitle"'
+        users = [
+            {'email': 'exclude@test.com', 'department': 'Dept', 'job_title': 'ExcludeTitle'},
+            {'email': 'keep@test.com', 'department': 'Dept', 'job_title': 'KeepTitle'}
+        ]
+        
+        result = get_users_to_exclude(users, mock_timecamp_config)
+        assert len(result) == 1
+        assert 'exclude@test.com' in result
+
+    def test_regex_matching_complex_condition(self, mock_timecamp_config):
+        """Test exclusion with complex regex (similar to user requirement)."""
+        # Regex: Exclude if Department is "Support" AND Job Title is NOT "Manager"
+        # We achieve "NOT Manager" by matching job_title="something else"
+        # Let's try: department="Support" job_title="(?!Manager)[^"]*"
+        mock_timecamp_config.exclude_regex = r'department="Support" job_title="(?!Manager)[^"]*"'
+        
+        users = [
+            {'email': 'manager@test.com', 'department': 'Support', 'job_title': 'Manager'},
+            {'email': 'dev@test.com', 'department': 'Support', 'job_title': 'Developer'},
+            {'email': 'other@test.com', 'department': 'Other', 'job_title': 'Developer'}
+        ]
+        
+        result = get_users_to_exclude(users, mock_timecamp_config)
+        
+        assert len(result) == 1
+        assert 'dev@test.com' in result
+
+    def test_invalid_regex_handling(self, mock_timecamp_config):
+        """Test that invalid regex doesn't crash and preserves users."""
+        mock_timecamp_config.exclude_regex = r'['  # Invalid regex
+        users = [
+            {'email': 'user@test.com', 'department': 'Dept', 'job_title': 'Title'}
+        ]
+        
+        # Should catch error and return empty set (no exclusions)
+        result = get_users_to_exclude(users, mock_timecamp_config)
+        assert len(result) == 0
+
+    def test_regex_context_formatting(self, mock_timecamp_config):
+        """Test that context string is formatted correctly with quotes handling."""
+        mock_timecamp_config.exclude_regex = r'department="DeptWith\"Quote"'
+        users = [
+            {'email': 'test@test.com', 'department': 'DeptWith"Quote', 'job_title': 'Title'}
+        ]
+        
+        # The function replaces " with ' in values before checking
+        # So department="DeptWith"Quote" becomes department="DeptWith'Quote" in context
+        
+        # Let's test that we can match what it actually produces
+        mock_timecamp_config.exclude_regex = r"department=\"DeptWith'Quote\""
+        
+        result = get_users_to_exclude(users, mock_timecamp_config)
+        assert len(result) == 1
+        assert 'test@test.com' in result
 

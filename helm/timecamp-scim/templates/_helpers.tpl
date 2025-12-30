@@ -100,6 +100,8 @@ Common environment variables
   value: {{ .useJobTitleNameUsers | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME_GROUPS
   value: {{ .useJobTitleNameGroups | quote }}
+- name: TIMECAMP_EXCLUDE_REGEX
+  value: {{ .excludeRegex | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
   value: {{ .useIsSupervisorRole | quote }}
 {{- end }}

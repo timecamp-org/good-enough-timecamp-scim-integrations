@@ -79,7 +79,8 @@ def mock_timecamp_config():
         use_job_title_name_groups=False,
         replace_email_domain="",
         use_is_supervisor_role=False,
-        disabled_users_group_id=0
+        disabled_users_group_id=0,
+        exclude_regex=""
     )
 
 

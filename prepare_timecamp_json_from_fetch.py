@@ -89,13 +89,42 @@ def replace_email_domain(email: str, new_domain: str) -> str:
 
 
 def process_group_path(department: Optional[str], config: TimeCampConfig) -> str:
-    """Process the department path considering skip_departments configuration."""
+    """
+    Process the department path.
+    Applies regex substitution if configured.
+    Supports multiple rules separated by ;;;
+    """
     if not department:
         return ""
     
-    # Skip departments logic is already applied in process_source_data via clean_department_path
-    # This now supports multiple comma-separated prefixes - first match is removed
-    # This is just for any additional processing if needed
+    # Apply regex substitution if configured
+    if config.change_groups_regex:
+        # Split by ;;; for multiple rules
+        rules = config.change_groups_regex.split(';;;')
+        current_department = department
+        
+        for rule in rules:
+            if not rule.strip():
+                continue
+                
+            # Expected format: "pattern|||replacement"
+            parts = rule.split('|||')
+            if len(parts) == 2:
+                pattern = parts[0]
+                replacement = parts[1]
+                try:
+                    # Use re.sub to replace pattern with replacement
+                    new_department = re.sub(pattern, replacement, current_department)
+                    if new_department != current_department:
+                        # Only log at debug level to avoid spam, but maybe info for the first few times?
+                        # Using debug is safer for large datasets
+                        logger.debug(f"Applied group regex transform: '{current_department}' -> '{new_department}'")
+                        current_department = new_department
+                except re.error as e:
+                    logger.error(f"Invalid regex in TIMECAMP_CHANGE_GROUPS_REGEX rule '{rule}': {e}")
+        
+        return current_department
+            
     return department
 
 
@@ -174,6 +203,9 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         
         # The department/group breadcrumb has already been processed with all configurations
         group_breadcrumb = user_data.get('department', '')
+        
+        # Apply group path transformation (regex)
+        group_breadcrumb = process_group_path(group_breadcrumb, config)
         
         # Force global admins to main group (empty breadcrumb)
         if user_data.get('force_global_admin_role') is True:
@@ -269,6 +301,16 @@ def main():
         logger.info(f"  - TIMECAMP_EXCLUDE_REGEX: '{config.exclude_regex}'")
         if config.exclude_regex:
             logger.info(f"    → Will exclude users matching regex against format: department=\"DEPT\" job_title=\"TITLE\" email=\"EMAIL\"")
+
+        logger.info(f"  - TIMECAMP_CHANGE_GROUPS_REGEX: '{config.change_groups_regex}'")
+        if config.change_groups_regex:
+            if '|||' in config.change_groups_regex:
+                if ';;;' in config.change_groups_regex:
+                    logger.info(f"    → Will transform group paths using multiple regex rules separated by ;;;")
+                else:
+                    logger.info(f"    → Will transform group paths using regex substitution (pattern|||replacement)")
+            else:
+                logger.warning(f"    → TIMECAMP_CHANGE_GROUPS_REGEX format seems invalid (missing '|||' separator)")
 
         logger.info(f"  - TIMECAMP_USE_IS_SUPERVISOR_ROLE: {config.use_is_supervisor_role}")
         if config.use_is_supervisor_role:

@@ -80,7 +80,8 @@ def mock_timecamp_config():
         replace_email_domain="",
         use_is_supervisor_role=False,
         disabled_users_group_id=0,
-        exclude_regex=""
+        exclude_regex="",
+        change_groups_regex=""
     )
 
 

@@ -230,6 +230,68 @@ class TestProcessGroupPath:
         result = process_group_path(department, mock_timecamp_config)
         assert result == ""
 
+    def test_process_group_path_regex_change(self, mock_timecamp_config):
+        """Test regex group path transformation."""
+        mock_timecamp_config.change_groups_regex = "Old Group|||New Group"
+        department = "Old Group/Subgroup"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "New Group/Subgroup"
+
+    def test_process_group_path_regex_no_match(self, mock_timecamp_config):
+        """Test regex group path transformation with no match."""
+        mock_timecamp_config.change_groups_regex = "Old Group|||New Group"
+        department = "Different Group"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "Different Group"
+
+    def test_process_group_path_regex_complex(self, mock_timecamp_config):
+        """Test regex group path transformation with complex regex."""
+        # Swap: "A [B]/C [D]" -> "X [Y]/C [D]"
+        mock_timecamp_config.change_groups_regex = r"A \[B\]|||X [Y]"
+        department = "A [B]/C [D]"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "X [Y]/C [D]"
+
+    def test_process_group_path_regex_invalid_format(self, mock_timecamp_config):
+        """Test invalid regex format (missing separator)."""
+        mock_timecamp_config.change_groups_regex = "InvalidFormat"
+        department = "Group"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "Group"
+
+    def test_process_group_path_regex_invalid_regex(self, mock_timecamp_config):
+        """Test invalid regex pattern."""
+        mock_timecamp_config.change_groups_regex = r"[Invalid|||Replacement"
+        department = "Group"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "Group"
+
+    def test_process_group_path_multiple_regex_rules(self, mock_timecamp_config):
+        """Test multiple regex rules separated by ;;;."""
+        # Rule 1: "A" -> "B"
+        # Rule 2: "B" -> "C"
+        # Result should be "C"
+        mock_timecamp_config.change_groups_regex = "A|||B;;;B|||C"
+        department = "A"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "C"
+
+    def test_process_group_path_multiple_regex_rules_partial_match(self, mock_timecamp_config):
+        """Test multiple regex rules where only some match."""
+        # Rule 1: "X" -> "Y" (No match)
+        # Rule 2: "A" -> "B" (Match)
+        mock_timecamp_config.change_groups_regex = "X|||Y;;;A|||B"
+        department = "A"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "B"
+
+    def test_process_group_path_multiple_regex_rules_with_empty_segments(self, mock_timecamp_config):
+        """Test multiple regex rules with empty segments (extra separators)."""
+        mock_timecamp_config.change_groups_regex = "A|||B;;;;;;B|||C"
+        department = "A"
+        result = process_group_path(department, mock_timecamp_config)
+        assert result == "C"
+
 
 class TestPrepareTimeCampUsers:
     """Tests for the main prepare_timecamp_users function."""

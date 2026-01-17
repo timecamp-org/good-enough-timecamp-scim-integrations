@@ -411,7 +411,12 @@ class TimeCampSynchronizer:
             # Move already disabled users to disabled group if configured
             if not tc_user.get('is_enabled', True):
                 if self.config.disabled_users_group_id > 0:
-                    if not dry_run:
+                    if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
+                        logger.debug(
+                            f"Skipping move for already disabled user {email} "
+                            f"(already in disabled group ID: {self.config.disabled_users_group_id})"
+                        )
+                    elif not dry_run:
                         logger.info(
                             f"Moving already disabled user {email} to disabled group (ID: {self.config.disabled_users_group_id})"
                         )
@@ -452,7 +457,12 @@ class TimeCampSynchronizer:
                 if self.config.disable_user_deactivation:
                     logger.info(f"Skipping deactivation for user {email} ({reason}) due to disable_user_deactivation config.")
                     if self.config.disabled_users_group_id > 0:
-                        if not dry_run:
+                        if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
+                            logger.debug(
+                                f"Skipping move for user {email} "
+                                f"(already in disabled group ID: {self.config.disabled_users_group_id})"
+                            )
+                        elif not dry_run:
                             logger.info(f"Moving user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
                             self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
                         else:
@@ -465,13 +475,25 @@ class TimeCampSynchronizer:
                     
                     # Move to disabled users group if configured
                     if self.config.disabled_users_group_id > 0:
-                        logger.info(f"Moving deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
-                        self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
+                        if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
+                            logger.debug(
+                                f"Skipping move for deactivated user {email} "
+                                f"(already in disabled group ID: {self.config.disabled_users_group_id})"
+                            )
+                        else:
+                            logger.info(f"Moving deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
+                            self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
 
                 else:
                     logger.info(f"[DRY RUN] Would deactivate user {email} ({reason})")
                     if self.config.disabled_users_group_id > 0:
-                        logger.info(f"[DRY RUN] Would move deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
+                        if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
+                            logger.debug(
+                                f"[DRY RUN] Skipping move for deactivated user {email} "
+                                f"(already in disabled group ID: {self.config.disabled_users_group_id})"
+                            )
+                        else:
+                            logger.info(f"[DRY RUN] Would move deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
     
     def _finalize_new_users(self) -> None:
         """Apply final settings to newly created users."""

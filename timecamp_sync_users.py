@@ -146,7 +146,7 @@ class TimeCampSynchronizer:
                    dry_run: bool = False) -> None:
         """Synchronize users with TimeCamp."""
         # Get current TimeCamp users
-        current_tc_users = self.api.get_users()
+        current_tc_users = self.api.get_users(include_enabled=False)
         tc_users_by_email = {user['email'].lower(): user for user in current_tc_users}
         
         # Get additional user data
@@ -157,9 +157,20 @@ class TimeCampSynchronizer:
         current_roles = {}
         
         if all_user_ids:
-            additional_emails = self.api.get_additional_emails(all_user_ids)
-            external_ids = self.api.get_external_ids(all_user_ids)
-            manually_added = self.api.get_manually_added_statuses(all_user_ids)
+            settings = self.api.get_user_settings_bulk(
+                all_user_ids,
+                ['additional_email', 'external_id', 'added_manually', 'disabled_user']
+            )
+            additional_emails = settings.get('additional_email', {})
+            external_ids = settings.get('external_id', {})
+            manually_added = {
+                user_id: str(value) == '1'
+                for user_id, value in settings.get('added_manually', {}).items()
+            }
+            disabled_statuses = settings.get('disabled_user', {})
+            for user in current_tc_users:
+                user_id = int(user['user_id'])
+                user['is_enabled'] = not (str(disabled_statuses.get(user_id)) == '1')
             current_roles = self.api.get_user_roles()
         
         # Build reverse mapping from additional emails
@@ -397,6 +408,22 @@ class TimeCampSynchronizer:
             if user_id in self.config.ignored_user_ids:
                 continue
             
+            # Move already disabled users to disabled group if configured
+            if not tc_user.get('is_enabled', True):
+                if self.config.disabled_users_group_id > 0:
+                    if not dry_run:
+                        logger.info(
+                            f"Moving already disabled user {email} to disabled group (ID: {self.config.disabled_users_group_id})"
+                        )
+                        self.api.update_user(
+                            user_id, {'groupId': self.config.disabled_users_group_id}, tc_user.get('group_id')
+                        )
+                    else:
+                        logger.info(
+                            f"[DRY RUN] Would move already disabled user {email} to disabled group (ID: {self.config.disabled_users_group_id})"
+                        )
+                continue
+            
             # Skip manually added users if configured
             if self.config.disable_manual_user_updates and manually_added.get(user_id, False):
                 logger.info(f"Skipping deactivation for manually added user: {email} (ID: {user_id}) due to disable_manual_user_updates config.")
@@ -404,10 +431,6 @@ class TimeCampSynchronizer:
             
             # Skip if already processed (matched by additional email)
             if user_id in processed_user_ids:
-                continue
-            
-            # Skip already deactivated users
-            if not tc_user.get('is_enabled', True):
                 continue
             
             # Determine if user should be deactivated

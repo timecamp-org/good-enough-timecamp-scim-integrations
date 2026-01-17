@@ -49,18 +49,19 @@ class TimeCampAPI:
                 raise
         raise requests.exceptions.RequestException(f"Failed after {max_retries} retries")
 
-    def get_users(self) -> List[Dict[str, Any]]:
-        """Get all users with their enabled status."""
+    def get_users(self, include_enabled: bool = True) -> List[Dict[str, Any]]:
+        """Get all users, optionally with enabled status."""
         users = self._make_request('GET', "users").json()
         # logger.debug(f"Users: {users}")
 
-        # Get enabled status for all users in bulk
-        user_ids = [int(user['user_id']) for user in users]
-        enabled_statuses = self.are_users_enabled(user_ids)
-        
-        # Add enabled status to each user
-        for user in users:
-            user['is_enabled'] = enabled_statuses.get(int(user['user_id']), True)
+        if include_enabled:
+            # Get enabled status for all users in bulk
+            user_ids = [int(user['user_id']) for user in users]
+            enabled_statuses = self.are_users_enabled(user_ids)
+            
+            # Add enabled status to each user
+            for user in users:
+                user['is_enabled'] = enabled_statuses.get(int(user['user_id']), True)
         
         return users
 
@@ -177,11 +178,22 @@ class TimeCampAPI:
 
     def get_user_settings(self, user_ids: List[int], setting_name: str, batch_size: int = 100) -> Dict[int, Optional[str]]:
         """Get specific user settings for multiple users in bulk."""
-        result = {}
+        return self.get_user_settings_bulk(user_ids, [setting_name], batch_size)[setting_name]
+
+    def get_user_settings_bulk(self, user_ids: List[int], setting_names: List[str], batch_size: int = 100) -> Dict[str, Dict[int, Optional[str]]]:
+        """Get multiple user settings for multiple users in bulk."""
+        if isinstance(setting_names, str):
+            setting_names = [setting_names]
+        
+        result: Dict[str, Dict[int, Optional[str]]] = {name: {} for name in setting_names}
+        
         for i in range(0, len(user_ids), batch_size):
             batch = user_ids[i:i + batch_size]
-            response = self._make_request('GET', f"user/{','.join(map(str, batch))}/setting", 
-                                        params={"name[]": setting_name})
+            response = self._make_request(
+                'GET',
+                f"user/{','.join(map(str, batch))}/setting",
+                params={"name[]": setting_names}
+            )
             settings = response.json()
             
             # Handle both possible API response formats
@@ -190,23 +202,33 @@ class TimeCampAPI:
                 for user_id in batch:
                     user_settings = settings.get(str(user_id), [])
                     if isinstance(user_settings, list):
-                        setting_value = next(
-                            (s.get('value') for s in user_settings 
-                             if s.get('name') == setting_name),
-                            None
-                        )
-                        result[user_id] = setting_value
+                        for name in setting_names:
+                            setting_value = next(
+                                (s.get('value') for s in user_settings if s.get('name') == name),
+                                None
+                            )
+                            result[name][user_id] = setting_value
                     else:
-                        result[user_id] = None
+                        for name in setting_names:
+                            result[name][user_id] = None
             else:
                 # Old API format where settings is a list
                 for user_id in batch:
-                    user_settings = [s for s in settings 
-                                   if str(s.get('userId', '')) == str(user_id) 
-                                   and s.get('name') == setting_name]
-                    result[user_id] = user_settings[0].get('value') if user_settings else None
+                    for name in setting_names:
+                        result[name][user_id] = None
+                
+                for setting in settings:
+                    setting_name = setting.get('name')
+                    if setting_name not in setting_names:
+                        continue
+                    user_id_raw = setting.get('userId')
+                    if user_id_raw is None:
+                        continue
+                    user_id = int(user_id_raw)
+                    if user_id in batch:
+                        result[setting_name][user_id] = setting.get('value')
         
-        return result 
+        return result
 
     def add_vacation(self, user_id: int, start_date: str, end_date: str, leave_type_id: str, shouldBe: int, vacationTime: int) -> None:
         """Add vacation/leave days for a user, iterating over the date range."""

@@ -426,6 +426,16 @@ class TimeCampSynchronizer:
                     reason = "not present in source"
             
             if should_deactivate:
+                if self.config.disable_user_deactivation:
+                    logger.info(f"Skipping deactivation for user {email} ({reason}) due to disable_user_deactivation config.")
+                    if self.config.disabled_users_group_id > 0:
+                        if not dry_run:
+                            logger.info(f"Moving user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
+                            self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
+                        else:
+                            logger.info(f"[DRY RUN] Would move user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
+                    continue
+
                 if not dry_run:
                     logger.info(f"Deactivating user {email} ({reason})")
                     self.api.update_user_setting(user_id, 'disabled_user', '1')
@@ -524,6 +534,7 @@ def main():
         logger.debug(f"Disable new users: {config.disable_new_users}")
         logger.debug(f"Disable external ID sync: {config.disable_external_id_sync}")
         logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
+        logger.debug(f"Disable user deactivation: {config.disable_user_deactivation}")
         logger.debug(f"Disable group updates: {config.disable_group_updates}")
         logger.debug(f"Disable role updates: {config.disable_role_updates}")
         logger.debug(f"Disable groups creation: {config.disable_groups_creation}")

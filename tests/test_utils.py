@@ -74,6 +74,7 @@ class TestTimeCampConfig:
                 assert config.use_supervisor_groups is False
                 assert config.use_department_groups is True
                 assert config.disable_new_users is False
+                assert config.disable_user_deactivation is False
     
     def test_from_env_boolean_parsing(self, monkeypatch):
         """Test parsing of boolean environment variables."""

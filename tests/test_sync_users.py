@@ -405,6 +405,32 @@ class TestTimeCampSynchronizer:
         mock_timecamp_api.update_user.assert_called_with(
             1001, {'groupId': 999}, '100'
         )
+
+    def test_handle_deactivations_disable_user_deactivation_moves_only(self, mock_timecamp_api, mock_timecamp_config):
+        """Test skipping deactivation but moving when disable_user_deactivation is enabled."""
+        mock_timecamp_config.disable_user_deactivation = True
+        mock_timecamp_config.disabled_users_group_id = 999
+
+        timecamp_users = []
+        tc_users_by_email = {
+            'deactivated@test.com': {
+                'user_id': '1001',
+                'email': 'deactivated@test.com',
+                'is_enabled': True,
+                'group_id': '100'
+            }
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._handle_deactivations(
+            timecamp_users, tc_users_by_email, {},
+            set(), {}, dry_run=False
+        )
+
+        mock_timecamp_api.update_user_setting.assert_not_called()
+        mock_timecamp_api.update_user.assert_called_with(
+            1001, {'groupId': 999}, '100'
+        )
     
     def test_finalize_new_users_sets_role(self, mock_timecamp_api, mock_timecamp_config):
         """Test finalizing newly created users with role."""

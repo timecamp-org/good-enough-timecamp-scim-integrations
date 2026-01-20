@@ -484,6 +484,65 @@ class TestPrepareTimeCampUsers:
         emails = [u['timecamp_email'] for u in result]
         assert emails == sorted(emails)
 
+    def test_prepare_users_with_raw_data(self, mock_timecamp_config):
+        """Test that raw_data is preserved when present."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Test User',
+                    'email': 'test@example.com',
+                    'status': 'active',
+                    'department': 'IT',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'custom_field': 'value', 'original_id': 123}
+                }
+            ]
+        }
+        
+        result = prepare_timecamp_users(source_data, mock_timecamp_config)
+        
+        assert 'raw_data' in result[0]
+        assert result[0]['raw_data']['custom_field'] == 'value'
+        assert result[0]['raw_data']['original_id'] == 123
+
+    def test_prepare_users_puts_entire_object_in_raw_data(self, mock_timecamp_config):
+        """Test that the entire source object is put inside raw_data field."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Test User',
+                    'email': 'test@example.com',
+                    'status': 'active',
+                    'department': 'IT',
+                    'job_title': 'Developer',
+                    'custom_field': 'custom_value',
+                    'supervisor_id': '',
+                    'original_raw': {'id': 123}
+                }
+            ]
+        }
+        
+        result = prepare_timecamp_users(source_data, mock_timecamp_config)
+        
+        user = result[0]
+        # Check standard TimeCamp fields
+        assert user['timecamp_email'] == 'test@example.com'
+        
+        # Check that extra fields are NOT at the top level anymore
+        assert 'custom_field' not in user
+        assert 'original_raw' not in user
+        
+        # Check that entire object is in raw_data
+        assert 'raw_data' in user
+        raw_data = user['raw_data']
+        assert raw_data['external_id'] == 'user-1'
+        assert raw_data['name'] == 'Test User'
+        assert raw_data['custom_field'] == 'custom_value'
+        assert raw_data['original_raw'] == {'id': 123}
+
 
 class TestRegexExclusion:
     """Tests for regex exclusion logic."""

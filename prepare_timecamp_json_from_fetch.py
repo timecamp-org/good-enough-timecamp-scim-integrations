@@ -224,7 +224,8 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
             'timecamp_email': timecamp_email,
             'timecamp_groups_breadcrumb': group_breadcrumb,
             'timecamp_status': status,
-            'timecamp_role': role
+            'timecamp_role': role,
+            'raw_data': user_data  # Include the entire source object as raw_data
         }
         
         # Add real_email if present and different from primary email

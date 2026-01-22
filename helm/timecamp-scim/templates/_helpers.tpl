@@ -171,8 +171,12 @@ Common environment variables
   value: {{ .pageSize | quote }}
 - name: LDAP_USE_SAMACCOUNTNAME
   value: {{ .useSamaccountname | quote }}
+- name: LDAP_USE_SAMACCOUNTNAME_ONLY
+  value: {{ .useSamaccountnameOnly | quote }}
 - name: LDAP_USE_OU_STRUCTURE
   value: {{ .useOuStructure | quote }}
+- name: LDAP_USE_OU_DESCRIPTION
+  value: {{ .useOuDescription | quote }}
 - name: LDAP_USE_REAL_EMAIL_AS_EMAIL
   value: {{ .useRealEmailAsEmail | quote }}
 - name: LDAP_USE_WINDOWS_LOGIN_EMAIL
@@ -183,6 +187,10 @@ Common environment variables
   value: {{ .useStartTls | quote }}
 - name: LDAP_SSL_VERIFY
   value: {{ .sslVerify | quote }}
+- name: LDAP_SUPERVISOR_GROUP_NAME
+  value: {{ .supervisorGroupName | quote }}
+- name: LDAP_GLOBAL_ADMIN_GROUP_NAME
+  value: {{ .globalAdminGroupName | quote }}
 {{- end }}
 {{- /* FactorialHR Configuration */ -}}
 {{- with .Values.config.factorial }}

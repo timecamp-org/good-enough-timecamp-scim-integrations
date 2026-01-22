@@ -1,12 +1,13 @@
 import os
 import json
 import base64
+import argparse
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
 from common.logger import setup_logger
 
-logger = setup_logger()
+logger = None  # Global logger placeholder
 
 # Cache for not-found employee IDs to avoid repeated requests
 NOT_FOUND_EMPLOYEES_CACHE = set()
@@ -123,6 +124,7 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments, s
             "status": "inactive",  # Mark as inactive since they weren't in the active set
             "supervisor_id": emp.get('supervisorId', ''),
             "is_supervisor": is_supervisor,
+            "raw_data": emp,
         }
         
         inactive_supervisors.append(user)
@@ -146,10 +148,21 @@ def fetch_missing_supervisors(subdomain, headers, users, excluded_departments, s
     
     return inactive_supervisors
 
-def fetch_bamboo_users():
+def fetch_bamboo_users(debug=False):
     """Fetch active users from BambooHR and save them to a JSON file."""
+    global logger
+    
+    # Initialize logger if not already initialized
+    if logger is None:
+        logger = setup_logger(debug=debug)
+        
     try:
         load_dotenv()
+        
+        # Override debug if env var is set
+        if os.getenv('DEBUG', 'false').lower() == 'true':
+            # Re-initialize logger if env var overrides argument
+            logger = setup_logger(debug=True)
         
         # Get environment variables
         subdomain = os.getenv('BAMBOOHR_SUBDOMAIN')
@@ -242,7 +255,8 @@ def fetch_bamboo_users():
         
         logger.info("Fetching employees from BambooHR...")
         
-        all_employees = []
+        users = []
+        today = datetime.today().strftime('%Y-%m-%d')
         current_page = 1
         
         while True:
@@ -256,9 +270,43 @@ def fetch_bamboo_users():
             data = response.json()
             employees = data.get('data', [])
             pagination = data.get('pagination', {})
-            # logger.info(f"Page {current_page} employees: {json.dumps(employees, indent=2)}")
             
-            all_employees.extend(employees)
+            # Process employees immediately
+            for emp in employees:
+                # Filter out terminated employees, future employees, and users with no email
+                employment_status = emp.get('employmentStatus', '')
+                hire_date = emp.get('hireDate', '')
+                department = emp.get('jobInformationDepartment', '')
+                
+                if (employment_status == 'Terminated' or
+                    (hire_date and hire_date > today) or
+                    not emp.get('email') or
+                    department in excluded_departments):
+                    continue
+                    
+                # Join department and division with a forward slash if both exist
+                division = emp.get('jobInformationDivision', '')
+                combined_department = f"{division}/{department}" if department and division else department or division or ''
+                
+                # Determine supervisor status based on rule
+                is_supervisor = False
+                if supervisor_field and supervisor_value:
+                    field_value = emp.get(supervisor_field, '')
+                    is_supervisor = str(field_value).strip() == supervisor_value
+                
+                user = {
+                    "external_id": emp.get('employeeNumber'),
+                    "job_title": emp.get('jobInformationJobTitle'),
+                    "name": emp.get('name', '').strip(),
+                    "email": emp.get('email'),
+                    "department": combined_department,
+                    "status": "active",
+                    "supervisor_id": emp.get('supervisorId', ''),
+                    "is_supervisor": is_supervisor,
+                    "raw_data": emp,
+                }
+                logger.debug(f"Processed user: {json.dumps(user, indent=2)}")
+                users.append(user)
             
             # Check if there are more pages
             if not pagination.get('next_page'):
@@ -266,44 +314,6 @@ def fetch_bamboo_users():
                 
             current_page += 1
             logger.info(f"Fetching page {current_page}...")
-        
-        # Transform to our schema
-        users = []
-        today = datetime.today().strftime('%Y-%m-%d')
-        
-        for emp in all_employees:
-            # Filter out terminated employees, future employees, and users with no email
-            employment_status = emp.get('employmentStatus', '')
-            hire_date = emp.get('hireDate', '')
-            department = emp.get('jobInformationDepartment', '')
-            
-            if (employment_status == 'Terminated' or
-                (hire_date and hire_date > today) or
-                not emp.get('email') or
-                department in excluded_departments):
-                continue
-                
-            # Join department and division with a forward slash if both exist
-            division = emp.get('jobInformationDivision', '')
-            combined_department = f"{division}/{department}" if department and division else department or division or ''
-            
-            # Determine supervisor status based on rule
-            is_supervisor = False
-            if supervisor_field and supervisor_value:
-                field_value = emp.get(supervisor_field, '')
-                is_supervisor = str(field_value).strip() == supervisor_value
-            
-            user = {
-                "external_id": emp.get('employeeNumber'),
-                "job_title": emp.get('jobInformationJobTitle'),
-                "name": emp.get('name', '').strip(),
-                "email": emp.get('email'),
-                "department": combined_department,
-                "status": "active",
-                "supervisor_id": emp.get('supervisorId', ''),
-                "is_supervisor": is_supervisor,
-            }
-            users.append(user)
         
         # Fetch missing supervisors recursively
         logger.info("Checking for missing supervisors in the hierarchy...")
@@ -331,4 +341,8 @@ def fetch_bamboo_users():
         raise
 
 if __name__ == "__main__":
-    fetch_bamboo_users() 
+    parser = argparse.ArgumentParser(description='Fetch users from BambooHR')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    args = parser.parse_args()
+    
+    fetch_bamboo_users(debug=args.debug) 

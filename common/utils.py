@@ -18,6 +18,7 @@ class TimeCampConfig:
     disable_external_id_sync: bool
     disable_additional_email_sync: bool
     disable_manual_user_updates: bool
+    disable_user_deactivation: bool
     disable_group_updates: bool
     disable_role_updates: bool
     disable_groups_creation: bool
@@ -28,6 +29,7 @@ class TimeCampConfig:
     disabled_users_group_id: int
     exclude_regex: str
     change_groups_regex: str
+    prepare_transform_config: str
 
     @classmethod
     def from_env(cls, validate_auth: bool = True) -> 'TimeCampConfig':
@@ -58,6 +60,7 @@ class TimeCampConfig:
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
         disable_additional_email_sync = os.getenv('TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
+        disable_user_deactivation = os.getenv('TIMECAMP_DISABLE_USER_DEACTIVATION', 'false').lower() == 'true'
         disable_group_updates = os.getenv('TIMECAMP_DISABLE_GROUP_UPDATES', 'false').lower() == 'true'
         disable_role_updates = os.getenv('TIMECAMP_DISABLE_ROLE_UPDATES', 'false').lower() == 'true'
         disable_groups_creation = os.getenv('TIMECAMP_DISABLE_GROUPS_CREATION', 'false').lower() == 'true'
@@ -68,6 +71,7 @@ class TimeCampConfig:
         disabled_users_group_id = int(os.getenv('TIMECAMP_DISABLED_USERS_GROUP_ID', '0'))
         exclude_regex = os.getenv('TIMECAMP_EXCLUDE_REGEX', '').strip()
         change_groups_regex = os.getenv('TIMECAMP_CHANGE_GROUPS_REGEX', '').strip()
+        prepare_transform_config = os.getenv('TIMECAMP_PREPARE_TRANSFORM_CONFIG', '').strip()
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -89,6 +93,7 @@ class TimeCampConfig:
             disable_external_id_sync=disable_external_id_sync,
             disable_additional_email_sync=disable_additional_email_sync,
             disable_manual_user_updates=disable_manual_user_updates,
+            disable_user_deactivation=disable_user_deactivation,
             disable_group_updates=disable_group_updates,
             disable_role_updates=disable_role_updates,
             disable_groups_creation=disable_groups_creation,
@@ -98,7 +103,8 @@ class TimeCampConfig:
             use_is_supervisor_role=use_is_supervisor_role,
             disabled_users_group_id=disabled_users_group_id,
             exclude_regex=exclude_regex,
-            change_groups_regex=change_groups_regex
+            change_groups_regex=change_groups_regex,
+            prepare_transform_config=prepare_transform_config
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

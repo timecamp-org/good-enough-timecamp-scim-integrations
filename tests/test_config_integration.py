@@ -246,6 +246,19 @@ class TestTimeCampSyncDisableConfigs:
                 config = TimeCampConfig.from_env()
                 assert config.disable_manual_user_updates is True
     
+    def test_disable_user_deactivation(self):
+        """Test TIMECAMP_DISABLE_USER_DEACTIVATION configuration."""
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_DISABLE_USER_DEACTIVATION': 'true'
+        }
+        
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                assert config.disable_user_deactivation is True
+    
     def test_disable_group_updates(self):
         """Test TIMECAMP_DISABLE_GROUP_UPDATES configuration."""
         env = {
@@ -294,6 +307,7 @@ class TestTimeCampSyncDisableConfigs:
             'TIMECAMP_DISABLE_EXTERNAL_ID_SYNC': 'true',
             'TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC': 'true',
             'TIMECAMP_DISABLE_MANUAL_USER_UPDATES': 'true',
+            'TIMECAMP_DISABLE_USER_DEACTIVATION': 'true',
             'TIMECAMP_DISABLE_GROUP_UPDATES': 'true',
             'TIMECAMP_DISABLE_ROLE_UPDATES': 'true',
             'TIMECAMP_DISABLE_GROUPS_CREATION': 'true'
@@ -307,6 +321,7 @@ class TestTimeCampSyncDisableConfigs:
                 assert config.disable_external_id_sync is True
                 assert config.disable_additional_email_sync is True
                 assert config.disable_manual_user_updates is True
+                assert config.disable_user_deactivation is True
                 assert config.disable_group_updates is True
                 assert config.disable_role_updates is True
                 assert config.disable_groups_creation is True

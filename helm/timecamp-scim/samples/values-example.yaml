@@ -36,7 +36,9 @@ config:
     showExternalId: true
     useSupervisorGroups: false
     useDepartmentGroups: true
+    prepareTransformConfig: ""  # Optional: JSON string or path to transform config
     disableNewUsers: false  # Set to true to prevent new user creation
+    disableUserDeactivation: false  # Set to true to avoid disabling users
 
   # Configure based on your HR system
   bamboohr:

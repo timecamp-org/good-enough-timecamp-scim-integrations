@@ -96,6 +96,8 @@ Common environment variables
   value: {{ .disableAdditionalEmailSync | quote }}
 - name: TIMECAMP_DISABLE_MANUAL_USER_UPDATES
   value: {{ .disableManualUserUpdates | quote }}
+- name: TIMECAMP_DISABLE_USER_DEACTIVATION
+  value: {{ .disableUserDeactivation | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME_USERS
   value: {{ .useJobTitleNameUsers | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME_GROUPS
@@ -104,6 +106,8 @@ Common environment variables
   value: {{ .excludeRegex | quote }}
 - name: TIMECAMP_CHANGE_GROUPS_REGEX
   value: {{ .changeGroupsRegex | quote }}
+- name: TIMECAMP_PREPARE_TRANSFORM_CONFIG
+  value: {{ .prepareTransformConfig | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
   value: {{ .useIsSupervisorRole | quote }}
 {{- end }}

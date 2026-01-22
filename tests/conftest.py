@@ -82,7 +82,8 @@ def mock_timecamp_config():
         use_is_supervisor_role=False,
         disabled_users_group_id=0,
         exclude_regex="",
-        change_groups_regex=""
+        change_groups_regex="",
+        prepare_transform_config=""
     )
 
 
@@ -174,6 +175,7 @@ def mock_env_vars(monkeypatch):
         "TIMECAMP_REPLACE_EMAIL_DOMAIN": "",
         "TIMECAMP_USE_IS_SUPERVISOR_ROLE": "false",
         "TIMECAMP_DISABLED_USERS_GROUP_ID": "0",
+        "TIMECAMP_PREPARE_TRANSFORM_CONFIG": "",
         
         # Azure AD configuration
         "AZURE_TENANT_ID": "test-tenant-id",

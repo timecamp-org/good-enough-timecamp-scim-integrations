@@ -29,6 +29,7 @@ class TimeCampConfig:
     disabled_users_group_id: int
     exclude_regex: str
     change_groups_regex: str
+    prepare_transform_config: str
 
     @classmethod
     def from_env(cls, validate_auth: bool = True) -> 'TimeCampConfig':
@@ -70,6 +71,7 @@ class TimeCampConfig:
         disabled_users_group_id = int(os.getenv('TIMECAMP_DISABLED_USERS_GROUP_ID', '0'))
         exclude_regex = os.getenv('TIMECAMP_EXCLUDE_REGEX', '').strip()
         change_groups_regex = os.getenv('TIMECAMP_CHANGE_GROUPS_REGEX', '').strip()
+        prepare_transform_config = os.getenv('TIMECAMP_PREPARE_TRANSFORM_CONFIG', '').strip()
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -101,7 +103,8 @@ class TimeCampConfig:
             use_is_supervisor_role=use_is_supervisor_role,
             disabled_users_group_id=disabled_users_group_id,
             exclude_regex=exclude_regex,
-            change_groups_regex=change_groups_regex
+            change_groups_regex=change_groups_regex,
+            prepare_transform_config=prepare_transform_config
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

@@ -25,6 +25,7 @@ class TestTimeCampConfig:
         assert config.show_external_id is False
         assert config.use_supervisor_groups is False
         assert config.use_department_groups is True
+        assert config.prepare_transform_config == ""
     
     def test_from_env_missing_api_key(self):
         """Test that missing API key raises error."""
@@ -75,6 +76,7 @@ class TestTimeCampConfig:
                 assert config.use_department_groups is True
                 assert config.disable_new_users is False
                 assert config.disable_user_deactivation is False
+                assert config.prepare_transform_config == ''
     
     def test_from_env_boolean_parsing(self, monkeypatch):
         """Test parsing of boolean environment variables."""

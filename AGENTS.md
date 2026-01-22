@@ -1,5 +1,9 @@
 # Agents
 
+## Python
+
+- Use uv to run tests or scripts
+
 ## Development
 
 - When adding new .env variables add also documentation to env.example, Docker, K8S

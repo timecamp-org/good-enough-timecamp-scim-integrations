@@ -9,11 +9,13 @@ import os
 import json
 import re
 import argparse
+import copy
 from typing import Dict, List, Any, Set, Tuple, Optional
 from dotenv import load_dotenv
 from common.logger import setup_logger
 from common.utils import TimeCampConfig, clean_name, get_users_file
 from common.supervisor_groups import process_source_data
+from common.transform_config import load_transform_config, apply_transform_config
 
 # Load environment variables
 load_dotenv()
@@ -168,6 +170,34 @@ def get_users_to_exclude(users: List[Dict[str, Any]], config: TimeCampConfig) ->
 
 def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) -> List[Dict[str, Any]]:
     """Process source data and prepare the final TimeCamp user structure."""
+    original_users = source_data.get('users', [])
+    original_users_by_external_id = {
+        user.get('external_id'): copy.deepcopy(user)
+        for user in original_users
+        if user.get('external_id')
+    }
+    original_users_by_email = {
+        str(user.get('email', '')).lower(): copy.deepcopy(user)
+        for user in original_users
+        if user.get('email')
+    }
+
+    if config.prepare_transform_config and 'users' in source_data:
+        transform_config = load_transform_config(config.prepare_transform_config)
+        transformed_users = []
+        transformed_count = 0
+
+        for user in source_data['users']:
+            transformed_user, changed = apply_transform_config(user, transform_config)
+            transformed_users.append(transformed_user)
+            if changed:
+                transformed_count += 1
+
+        if transformed_count:
+            logger.info(f"Applied prepare transforms to {transformed_count} users")
+
+        source_data = {**source_data, 'users': transformed_users}
+
     # Check if force_supervisor_role exists in the source data
     force_supervisor_exists = check_force_supervisor_exists(source_data)
     
@@ -218,6 +248,15 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         timecamp_email = replace_email_domain(email, config.replace_email_domain)
         
         # Create TimeCamp user structure
+        original_user = None
+        external_id = user_data.get('external_id')
+        if external_id and external_id in original_users_by_external_id:
+            original_user = original_users_by_external_id[external_id]
+        else:
+            original_user = original_users_by_email.get(email)
+        if original_user is None:
+            original_user = user_data
+
         timecamp_user = {
             'timecamp_external_id': user_data.get('external_id', ''),
             'timecamp_user_name': user_data['name'],  # Already formatted by process_source_data
@@ -225,7 +264,7 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
             'timecamp_groups_breadcrumb': group_breadcrumb,
             'timecamp_status': status,
             'timecamp_role': role,
-            'raw_data': user_data  # Include the entire source object as raw_data
+            'raw_data': original_user  # Preserve original source object as raw_data
         }
         
         # Add real_email if present and different from primary email
@@ -313,6 +352,10 @@ def main():
             else:
                 logger.warning(f"    → TIMECAMP_CHANGE_GROUPS_REGEX format seems invalid (missing '|||' separator)")
 
+        logger.info(f"  - TIMECAMP_PREPARE_TRANSFORM_CONFIG: '{config.prepare_transform_config}'")
+        if config.prepare_transform_config:
+            logger.info("    → Will apply filter/transform rules to source users before preparation")
+
         logger.info(f"  - TIMECAMP_USE_IS_SUPERVISOR_ROLE: {config.use_is_supervisor_role}")
         if config.use_is_supervisor_role:
             logger.info("    → Will determine supervisor role from 'is_supervisor' boolean field")
@@ -335,7 +378,23 @@ def main():
         
         # Process and prepare TimeCamp users
         timecamp_users = prepare_timecamp_users(source_data, config)
-        
+
+        if config.prepare_transform_config:
+            output_transform = load_transform_config(config.prepare_transform_config)
+            transformed_users = []
+            transformed_count = 0
+
+            for user in timecamp_users:
+                transformed_user, changed = apply_transform_config(user, output_transform)
+                transformed_users.append(transformed_user)
+                if changed:
+                    transformed_count += 1
+
+            if transformed_count:
+                logger.info(f"Applied prepare transforms to {transformed_count} prepared users")
+
+            timecamp_users = transformed_users
+
         logger.info(f"Prepared {len(timecamp_users)} users for TimeCamp")
         
         # Count active/inactive users

@@ -54,6 +54,17 @@ config:
     dn: "CN=Users,DC=company,DC=local"
     username: "ldap-reader"
     emailDomain: "company.local"
+    useSamaccountname: false
+    useSamaccountnameOnly: false
+    useOuStructure: false
+    useOuDescription: false
+    useRealEmailAsEmail: false
+    useWindowsLoginEmail: false
+    useSsl: false
+    useStartTls: false
+    sslVerify: true
+    supervisorGroupName: ""
+    globalAdminGroupName: ""
   
   factorial:
     leaveTypeMap: '{"vacation": "Vacation", "sick": "Sick Leave"}'

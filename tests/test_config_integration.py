@@ -437,6 +437,48 @@ class TestTimeCampDomainConfig:
                 assert config.domain == 'app.timecamp.com'
 
 
+class TestTimeCampSslConfig:
+    """Test TimeCamp SSL configuration."""
+    
+    def test_ssl_verify_default(self):
+        """Test default TIMECAMP_SSL_VERIFY (should be true)."""
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100'
+        }
+        
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                assert config.ssl_verify is True
+    
+    def test_ssl_verify_false(self):
+        """Test TIMECAMP_SSL_VERIFY=false."""
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_SSL_VERIFY': 'false'
+        }
+        
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                assert config.ssl_verify is False
+    
+    def test_ssl_verify_true(self):
+        """Test TIMECAMP_SSL_VERIFY=true."""
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_SSL_VERIFY': 'true'
+        }
+        
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                assert config.ssl_verify is True
+
+
 class TestConfigurationCombinations:
     """Test realistic configuration combinations."""
     

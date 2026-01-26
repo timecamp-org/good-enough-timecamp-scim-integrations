@@ -173,7 +173,7 @@ def mock_env_vars(monkeypatch):
         "TIMECAMP_REPLACE_EMAIL_DOMAIN": "",
         "TIMECAMP_USE_IS_SUPERVISOR_ROLE": "false",
         "TIMECAMP_DISABLED_USERS_GROUP_ID": "0",
-        "TIMECAMP_SSL_VERIFY": "true",
+        "TIMECAMP_SSL_VERIFY": "false",
         
         # Azure AD configuration
         "AZURE_TENANT_ID": "test-tenant-id",

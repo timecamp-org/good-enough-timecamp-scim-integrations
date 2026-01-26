@@ -104,6 +104,8 @@ Common environment variables
   value: {{ .excludeRegex | quote }}
 - name: TIMECAMP_CHANGE_GROUPS_REGEX
   value: {{ .changeGroupsRegex | quote }}
+- name: TIMECAMP_SSL_VERIFY
+  value: {{ .sslVerify | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
   value: {{ .useIsSupervisorRole | quote }}
 {{- end }}

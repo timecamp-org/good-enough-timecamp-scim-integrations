@@ -69,7 +69,7 @@ class TimeCampConfig:
         disabled_users_group_id = int(os.getenv('TIMECAMP_DISABLED_USERS_GROUP_ID', '0'))
         exclude_regex = os.getenv('TIMECAMP_EXCLUDE_REGEX', '').strip()
         change_groups_regex = os.getenv('TIMECAMP_CHANGE_GROUPS_REGEX', '').strip()
-        ssl_verify = os.getenv('TIMECAMP_SSL_VERIFY', 'true').lower() == 'true'
+        ssl_verify = os.getenv('TIMECAMP_SSL_VERIFY', 'false').lower() == 'true'
         
         # Parse ignored user IDs
         ignored_user_ids = {

@@ -71,6 +71,7 @@ def mock_timecamp_config():
         disable_new_users=False,
         disable_external_id_sync=False,
         disable_additional_email_sync=False,
+        update_email_on_external_id=False,
         disable_manual_user_updates=False,
         disable_user_deactivation=False,
         disable_group_updates=False,
@@ -83,7 +84,8 @@ def mock_timecamp_config():
         disabled_users_group_id=0,
         exclude_regex="",
         change_groups_regex="",
-        prepare_transform_config=""
+        prepare_transform_config="",
+        ssl_verify=True
     )
 
 
@@ -165,6 +167,7 @@ def mock_env_vars(monkeypatch):
         "TIMECAMP_DISABLE_NEW_USERS": "false",
         "TIMECAMP_DISABLE_EXTERNAL_ID_SYNC": "false",
         "TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC": "false",
+        "TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID": "false",
         "TIMECAMP_DISABLE_MANUAL_USER_UPDATES": "false",
         "TIMECAMP_DISABLE_USER_DEACTIVATION": "false",
         "TIMECAMP_DISABLE_GROUP_UPDATES": "false",
@@ -176,6 +179,7 @@ def mock_env_vars(monkeypatch):
         "TIMECAMP_USE_IS_SUPERVISOR_ROLE": "false",
         "TIMECAMP_DISABLED_USERS_GROUP_ID": "0",
         "TIMECAMP_PREPARE_TRANSFORM_CONFIG": "",
+        "TIMECAMP_SSL_VERIFY": "false",
         
         # Azure AD configuration
         "AZURE_TENANT_ID": "test-tenant-id",

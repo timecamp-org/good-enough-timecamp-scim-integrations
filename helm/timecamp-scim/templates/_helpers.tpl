@@ -94,6 +94,8 @@ Common environment variables
   value: {{ .disableExternalIdSync | quote }}
 - name: TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC
   value: {{ .disableAdditionalEmailSync | quote }}
+- name: TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID
+  value: {{ .updateEmailOnExternalId | quote }}
 - name: TIMECAMP_DISABLE_MANUAL_USER_UPDATES
   value: {{ .disableManualUserUpdates | quote }}
 - name: TIMECAMP_DISABLE_USER_DEACTIVATION
@@ -108,6 +110,8 @@ Common environment variables
   value: {{ .changeGroupsRegex | quote }}
 - name: TIMECAMP_PREPARE_TRANSFORM_CONFIG
   value: {{ .prepareTransformConfig | quote }}
+- name: TIMECAMP_SSL_VERIFY
+  value: {{ .sslVerify | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
   value: {{ .useIsSupervisorRole | quote }}
 {{- end }}
@@ -175,8 +179,12 @@ Common environment variables
   value: {{ .pageSize | quote }}
 - name: LDAP_USE_SAMACCOUNTNAME
   value: {{ .useSamaccountname | quote }}
+- name: LDAP_USE_SAMACCOUNTNAME_ONLY
+  value: {{ .useSamaccountnameOnly | quote }}
 - name: LDAP_USE_OU_STRUCTURE
   value: {{ .useOuStructure | quote }}
+- name: LDAP_USE_OU_DESCRIPTION
+  value: {{ .useOuDescription | quote }}
 - name: LDAP_USE_REAL_EMAIL_AS_EMAIL
   value: {{ .useRealEmailAsEmail | quote }}
 - name: LDAP_USE_WINDOWS_LOGIN_EMAIL
@@ -187,6 +195,10 @@ Common environment variables
   value: {{ .useStartTls | quote }}
 - name: LDAP_SSL_VERIFY
   value: {{ .sslVerify | quote }}
+- name: LDAP_SUPERVISOR_GROUP_NAME
+  value: {{ .supervisorGroupName | quote }}
+- name: LDAP_GLOBAL_ADMIN_GROUP_NAME
+  value: {{ .globalAdminGroupName | quote }}
 {{- end }}
 {{- /* FactorialHR Configuration */ -}}
 {{- with .Values.config.factorial }}

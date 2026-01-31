@@ -154,6 +154,7 @@ config:
     disableNewUsers: false
     disableExternalIdSync: false
     disableAdditionalEmailSync: false
+    updateEmailOnExternalId: false
     disableManualUserUpdates: false
     disableUserDeactivation: false
     useJobTitleNameUsers: false
@@ -162,6 +163,7 @@ config:
     excludeRegex: ""  # Optional: Regex to exclude users (e.g., 'department="Other"')
     changeGroupsRegex: ""  # Optional: Regex to transform group paths (e.g. 'pattern|||replacement')
     prepareTransformConfig: ""  # Optional: JSON string or path to transform config
+    sslVerify: false
     useIsSupervisorRole: false  # Use is_supervisor boolean field to determine supervisor role
   
   # BambooHR Configuration
@@ -192,12 +194,16 @@ config:
     emailDomain: ""
     pageSize: 1000
     useSamaccountname: false
+    useSamaccountnameOnly: false
     useOuStructure: false
+    useOuDescription: false
     useRealEmailAsEmail: false
     useWindowsLoginEmail: false
     useSsl: false
     useStartTls: false
     sslVerify: true
+    supervisorGroupName: ""
+    globalAdminGroupName: ""
   
   # FactorialHR Configuration
   factorial:

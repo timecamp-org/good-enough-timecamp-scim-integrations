@@ -34,11 +34,13 @@ config:
     rootGroupId: "00000"  # Your root group ID
     ignoredUserIds: "1,2,3"  # User IDs to ignore
     showExternalId: true
+    sslVerify: false
     useSupervisorGroups: false
     useDepartmentGroups: true
     prepareTransformConfig: ""  # Optional: JSON string or path to transform config
     disableNewUsers: false  # Set to true to prevent new user creation
     disableUserDeactivation: false  # Set to true to avoid disabling users
+    updateEmailOnExternalId: false  # Set to true to update email when matched by external ID
 
   # Configure based on your HR system
   bamboohr:
@@ -56,6 +58,17 @@ config:
     dn: "CN=Users,DC=company,DC=local"
     username: "ldap-reader"
     emailDomain: "company.local"
+    useSamaccountname: false
+    useSamaccountnameOnly: false
+    useOuStructure: false
+    useOuDescription: false
+    useRealEmailAsEmail: false
+    useWindowsLoginEmail: false
+    useSsl: false
+    useStartTls: false
+    sslVerify: true
+    supervisorGroupName: ""
+    globalAdminGroupName: ""
   
   factorial:
     leaveTypeMap: '{"vacation": "Vacation", "sick": "Sick Leave"}'

@@ -7,14 +7,22 @@ from common.utils import TimeCampConfig
 from datetime import datetime, timedelta
 
 # Suppress SSL verification warnings
-warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+# warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 logger = setup_logger('timecamp_sync')
 
 class TimeCampAPI:
     def __init__(self, config: TimeCampConfig):
-        self.base_url = f"https://{config.domain}/third_party/api"
+        domain = config.domain
+        if not domain.startswith(('http://', 'https://')):
+            domain = f"https://{domain}"
+        self.base_url = f"{domain}/third_party/api"
         self.headers = {"Accept": "application/json", "Content-Type": "application/json", "Authorization": f"Bearer {config.api_key}"}
+        self.ssl_verify = config.ssl_verify
+        
+        if not self.ssl_verify:
+            # Suppress SSL verification warnings only if verification is disabled
+            warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
@@ -29,7 +37,7 @@ class TimeCampAPI:
         
         for attempt in range(max_retries):
             try:
-                response = requests.request(method, url, headers=self.headers, verify=False, **kwargs)
+                response = requests.request(method, url, headers=self.headers, verify=self.ssl_verify, **kwargs)
                 logger.debug(f"Response status: {response.status_code}")
                 # logger.debug(f"Response headers: {dict(response.headers)}")
                 # logger.debug(f"Response content: {response.text[:1000]}")  # First 1000 chars to avoid huge logs
@@ -102,6 +110,8 @@ class TimeCampAPI:
     def update_user(self, user_id: int, updates: Dict[str, Any], group_id: int) -> None:
         if 'fullName' in updates:
             self._make_request('POST', "user", json={"display_name": updates['fullName'], "user_id": str(user_id)})
+        if 'email' in updates:
+            self._make_request('POST', "user", json={"email": updates['email'], "user_id": str(user_id)})
         if 'groupId' in updates:
             self._make_request('PUT', f"group/{group_id}/user", json={"group_id": str(updates['groupId']), "user_id": str(user_id)})
         if 'role_id' in updates:

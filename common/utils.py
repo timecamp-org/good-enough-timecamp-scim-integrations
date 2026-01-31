@@ -17,6 +17,7 @@ class TimeCampConfig:
     disable_new_users: bool
     disable_external_id_sync: bool
     disable_additional_email_sync: bool
+    update_email_on_external_id: bool
     disable_manual_user_updates: bool
     disable_user_deactivation: bool
     disable_group_updates: bool
@@ -30,6 +31,7 @@ class TimeCampConfig:
     exclude_regex: str
     change_groups_regex: str
     prepare_transform_config: str
+    ssl_verify: bool
 
     @classmethod
     def from_env(cls, validate_auth: bool = True) -> 'TimeCampConfig':
@@ -59,6 +61,7 @@ class TimeCampConfig:
         disable_new_users = os.getenv('TIMECAMP_DISABLE_NEW_USERS', 'false').lower() == 'true'
         disable_external_id_sync = os.getenv('TIMECAMP_DISABLE_EXTERNAL_ID_SYNC', 'false').lower() == 'true'
         disable_additional_email_sync = os.getenv('TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC', 'false').lower() == 'true'
+        update_email_on_external_id = os.getenv('TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID', 'false').lower() == 'true'
         disable_manual_user_updates = os.getenv('TIMECAMP_DISABLE_MANUAL_USER_UPDATES', 'false').lower() == 'true'
         disable_user_deactivation = os.getenv('TIMECAMP_DISABLE_USER_DEACTIVATION', 'false').lower() == 'true'
         disable_group_updates = os.getenv('TIMECAMP_DISABLE_GROUP_UPDATES', 'false').lower() == 'true'
@@ -72,6 +75,7 @@ class TimeCampConfig:
         exclude_regex = os.getenv('TIMECAMP_EXCLUDE_REGEX', '').strip()
         change_groups_regex = os.getenv('TIMECAMP_CHANGE_GROUPS_REGEX', '').strip()
         prepare_transform_config = os.getenv('TIMECAMP_PREPARE_TRANSFORM_CONFIG', '').strip()
+        ssl_verify = os.getenv('TIMECAMP_SSL_VERIFY', 'false').lower() == 'true'
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -92,6 +96,7 @@ class TimeCampConfig:
             disable_new_users=disable_new_users,
             disable_external_id_sync=disable_external_id_sync,
             disable_additional_email_sync=disable_additional_email_sync,
+            update_email_on_external_id=update_email_on_external_id,
             disable_manual_user_updates=disable_manual_user_updates,
             disable_user_deactivation=disable_user_deactivation,
             disable_group_updates=disable_group_updates,
@@ -104,7 +109,8 @@ class TimeCampConfig:
             disabled_users_group_id=disabled_users_group_id,
             exclude_regex=exclude_regex,
             change_groups_regex=change_groups_regex,
-            prepare_transform_config=prepare_transform_config
+            prepare_transform_config=prepare_transform_config,
+            ssl_verify=ssl_verify
         )
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters

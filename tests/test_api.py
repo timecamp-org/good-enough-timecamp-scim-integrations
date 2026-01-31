@@ -162,6 +162,20 @@ class TestTimeCampAPI:
         assert mock_request.called
         call_kwargs = mock_request.call_args[1]
         assert 'display_name' in call_kwargs['json']
+
+    @patch('common.api.requests.request')
+    def test_update_user_email(self, mock_request, mock_timecamp_config):
+        """Test updating user email."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_request.return_value = mock_response
+        
+        api = TimeCampAPI(mock_timecamp_config)
+        api.update_user(1001, {'email': 'updated@test.com'}, 100)
+        
+        call_kwargs = mock_request.call_args[1]
+        assert 'email' in call_kwargs['json']
+        assert call_kwargs['json']['email'] == 'updated@test.com'
     
     @patch('common.api.requests.request')
     def test_update_user_group(self, mock_request, mock_timecamp_config):
@@ -385,4 +399,48 @@ class TestTimeCampAPI:
         
         # Should make DELETE request
         assert mock_request.call_args[0][0] == 'DELETE'
+
+    def test_init_with_protocol(self, mock_timecamp_config):
+        """Test API initialization with protocol in domain."""
+        mock_timecamp_config.domain = "http://example.com"
+        api = TimeCampAPI(mock_timecamp_config)
+        assert api.base_url == "http://example.com/third_party/api"
+
+        mock_timecamp_config.domain = "https://example.com"
+        api = TimeCampAPI(mock_timecamp_config)
+        assert api.base_url == "https://example.com/third_party/api"
+
+    def test_init_ssl_verify(self, mock_timecamp_config):
+        """Test API initialization with SSL verify configuration."""
+        mock_timecamp_config.ssl_verify = True
+        api = TimeCampAPI(mock_timecamp_config)
+        assert api.ssl_verify is True
+        
+        mock_timecamp_config.ssl_verify = False
+        api = TimeCampAPI(mock_timecamp_config)
+        assert api.ssl_verify is False
+
+    @patch('common.api.requests.request')
+    def test_make_request_ssl_verify(self, mock_request, mock_timecamp_config):
+        """Test that SSL verification setting is passed to requests."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_request.return_value = mock_response
+        
+        # Test with ssl_verify=True
+        mock_timecamp_config.ssl_verify = True
+        api = TimeCampAPI(mock_timecamp_config)
+        api._make_request('GET', 'users')
+        
+        call_kwargs = mock_request.call_args[1]
+        assert call_kwargs['verify'] is True
+        
+        # Test with ssl_verify=False
+        mock_timecamp_config.ssl_verify = False
+        api = TimeCampAPI(mock_timecamp_config)
+        api._make_request('GET', 'users')
+        
+        call_kwargs = mock_request.call_args[1]
+        assert call_kwargs['verify'] is False
 

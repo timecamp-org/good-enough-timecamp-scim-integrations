@@ -179,6 +179,13 @@ class TimeCampSynchronizer:
             if add_email:
                 additional_email_to_user[add_email.lower()] = user_id
         
+        # Build reverse mapping from external IDs (only when external ID sync is enabled)
+        external_id_to_user = {}
+        if not self.config.disable_external_id_sync:
+            for user_id, external_id in external_ids.items():
+                if external_id:
+                    external_id_to_user[str(external_id)] = user_id
+        
         # Track processed users to avoid duplicates
         processed_user_ids = set()
         
@@ -194,6 +201,7 @@ class TimeCampSynchronizer:
             # Find existing user by primary email or additional email
             existing_user = None
             user_id = None
+            matched_by_external_id = False
             
             if email in tc_users_by_email:
                 existing_user = tc_users_by_email[email]
@@ -205,6 +213,15 @@ class TimeCampSynchronizer:
                     if int(tc_user['user_id']) == user_id:
                         existing_user = tc_user
                         break
+            elif tc_user_data.get('timecamp_external_id') and not self.config.disable_external_id_sync:
+                external_id = str(tc_user_data['timecamp_external_id'])
+                if external_id in external_id_to_user:
+                    user_id = external_id_to_user[external_id]
+                    for tc_email, tc_user in tc_users_by_email.items():
+                        if int(tc_user['user_id']) == user_id:
+                            existing_user = tc_user
+                            matched_by_external_id = True
+                            break
             
             # Skip if already processed
             if user_id and user_id in processed_user_ids:
@@ -233,7 +250,7 @@ class TimeCampSynchronizer:
                 self._update_existing_user(
                     existing_user, tc_user_data, target_group_id, target_group_name,
                     additional_emails, external_ids, manually_added, current_roles,
-                    dry_run
+                    matched_by_external_id, dry_run
                 )
             else:
                 # Create new user
@@ -259,6 +276,7 @@ class TimeCampSynchronizer:
                             external_ids: Dict[int, Optional[str]], 
                             manually_added: Dict[int, bool],
                             current_roles: Dict[str, List[Dict[str, str]]],
+                            matched_by_external_id: bool,
                             dry_run: bool) -> None:
         """Update an existing TimeCamp user."""
         user_id = int(existing_user['user_id'])
@@ -281,6 +299,13 @@ class TimeCampSynchronizer:
         if existing_user['display_name'] != tc_user_data['timecamp_user_name']:
             updates['fullName'] = tc_user_data['timecamp_user_name']
             changes.append(f"name from '{existing_user['display_name']}' to '{tc_user_data['timecamp_user_name']}'")
+        
+        # Check email update (only when matched by external ID and enabled)
+        if self.config.update_email_on_external_id and matched_by_external_id:
+            desired_email = tc_user_data['timecamp_email']
+            if existing_user['email'].lower() != desired_email.lower():
+                updates['email'] = desired_email
+                changes.append(f"email from '{existing_user['email']}' to '{desired_email}'")
         
         # Check group update (only if not disabled)
         if not self.config.disable_group_updates and str(existing_user.get('group_id')) != str(target_group_id):

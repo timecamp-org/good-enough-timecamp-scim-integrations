@@ -494,7 +494,7 @@ class TestPrepareTimeCampUsers:
                         "string": {"starts_with": "IT/"}
                     },
                     {
-                        "property": "raw_data.customField123",
+                        "property": "raw_data.customField4932",
                         "string": {"equals": "yes"}
                     }
                 ]
@@ -542,7 +542,7 @@ class TestPrepareTimeCampUsers:
         unmatched_user = next(u for u in result if u['timecamp_email'] == 'nomatch@test.com')
 
         assert matched_user['timecamp_groups_breadcrumb'] == ''
-        assert unmatched_user['timecamp_groups_breadcrumb'] == 'Human Resources/Recruiting'
+        assert unmatched_user['timecamp_groups_breadcrumb'] == 'IT/Recruiting'
 
     def test_prepare_users_puts_entire_object_in_raw_data(self, mock_timecamp_config):
         """Test that the entire source object is put inside raw_data field."""

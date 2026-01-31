@@ -232,6 +232,19 @@ class TestTimeCampSyncDisableConfigs:
             with patch.dict(os.environ, env, clear=True):
                 config = TimeCampConfig.from_env()
                 assert config.disable_additional_email_sync is True
+
+    def test_update_email_on_external_id(self):
+        """Test TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID configuration."""
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID': 'true'
+        }
+        
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                assert config.update_email_on_external_id is True
     
     def test_disable_manual_user_updates(self):
         """Test TIMECAMP_DISABLE_MANUAL_USER_UPDATES configuration."""

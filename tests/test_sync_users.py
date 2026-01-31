@@ -171,7 +171,7 @@ class TestTimeCampSynchronizer:
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._update_existing_user(
             existing_user, tc_user_data, 100, 'root',
-            {}, {}, {}, {}, dry_run=False
+            {}, {}, {}, {}, False, dry_run=False
         )
         
         # Should update user with new name
@@ -180,6 +180,41 @@ class TestTimeCampSynchronizer:
         assert call_args[0] == 1001
         assert 'fullName' in call_args[1]
         assert call_args[1]['fullName'] == 'New Name'
+
+    def test_sync_users_updates_email_when_matched_by_external_id(self, mock_timecamp_api, mock_timecamp_config):
+        """Test updating email when matched by external ID and enabled."""
+        mock_timecamp_config.update_email_on_external_id = True
+        
+        mock_timecamp_api.get_users.return_value = [
+            {
+                'user_id': '1001',
+                'email': 'old@test.com',
+                'display_name': 'User Name',
+                'group_id': '100',
+                'is_enabled': True
+            }
+        ]
+        mock_timecamp_api.get_additional_emails.return_value = {}
+        mock_timecamp_api.get_external_ids.return_value = {1001: 'ext-123'}
+        mock_timecamp_api.get_manually_added_statuses.return_value = {}
+        mock_timecamp_api.get_user_roles.return_value = {}
+        
+        timecamp_users = [
+            {
+                'timecamp_email': 'new@test.com',
+                'timecamp_user_name': 'User Name',
+                'timecamp_role': 'user',
+                'timecamp_status': 'active',
+                'timecamp_external_id': 'ext-123'
+            }
+        ]
+        
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._sync_users(timecamp_users, group_structure={}, dry_run=False)
+        
+        call_args = mock_timecamp_api.update_user.call_args[0]
+        assert call_args[0] == 1001
+        assert call_args[1]['email'] == 'new@test.com'
     
     def test_update_existing_user_group_change(self, mock_timecamp_api, mock_timecamp_config):
         """Test updating user group."""
@@ -201,7 +236,7 @@ class TestTimeCampSynchronizer:
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._update_existing_user(
             existing_user, tc_user_data, 101, 'Engineering',
-            {}, {}, {}, {}, dry_run=False
+            {}, {}, {}, {}, False, dry_run=False
         )
         
         # Should update group
@@ -231,7 +266,7 @@ class TestTimeCampSynchronizer:
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._update_existing_user(
             existing_user, tc_user_data, 101, 'Engineering',
-            {}, {}, {}, {}, dry_run=False
+            {}, {}, {}, {}, False, dry_run=False
         )
         
         # Should not update if only difference is group
@@ -261,7 +296,7 @@ class TestTimeCampSynchronizer:
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._update_existing_user(
             existing_user, tc_user_data, 100, 'root',
-            {}, {}, {}, {}, dry_run=False
+            {}, {}, {}, {}, False, dry_run=False
         )
         
         mock_timecamp_api.update_user.assert_not_called()
@@ -290,7 +325,7 @@ class TestTimeCampSynchronizer:
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._update_existing_user(
             existing_user, tc_user_data, 100, 'root',
-            {}, {}, manually_added, {}, dry_run=False
+            {}, {}, manually_added, {}, False, dry_run=False
         )
         
         mock_timecamp_api.update_user.assert_not_called()
@@ -315,7 +350,7 @@ class TestTimeCampSynchronizer:
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._update_existing_user(
             existing_user, tc_user_data, 100, 'root',
-            {}, {}, {}, {}, dry_run=False
+            {}, {}, {}, {}, False, dry_run=False
         )
         
         # Should re-enable user

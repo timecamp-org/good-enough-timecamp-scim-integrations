@@ -109,6 +109,8 @@ class TimeCampAPI:
     def update_user(self, user_id: int, updates: Dict[str, Any], group_id: int) -> None:
         if 'fullName' in updates:
             self._make_request('POST', "user", json={"display_name": updates['fullName'], "user_id": str(user_id)})
+        if 'email' in updates:
+            self._make_request('POST', "user", json={"email": updates['email'], "user_id": str(user_id)})
         if 'groupId' in updates:
             self._make_request('PUT', f"group/{group_id}/user", json={"group_id": str(updates['groupId']), "user_id": str(user_id)})
         if 'role_id' in updates:

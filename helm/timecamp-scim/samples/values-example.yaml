@@ -37,7 +37,9 @@ config:
     sslVerify: false
     useSupervisorGroups: false
     useDepartmentGroups: true
+    prepareTransformConfig: ""  # Optional: JSON string or path to transform config
     disableNewUsers: false  # Set to true to prevent new user creation
+    disableUserDeactivation: false  # Set to true to avoid disabling users
     updateEmailOnExternalId: false  # Set to true to update email when matched by external ID
 
   # Configure based on your HR system

@@ -156,11 +156,13 @@ config:
     disableAdditionalEmailSync: false
     updateEmailOnExternalId: false
     disableManualUserUpdates: false
+    disableUserDeactivation: false
     useJobTitleNameUsers: false
     useJobTitleNameGroups: false
     replaceEmailDomain: ""  # Optional: replace email domain (e.g., "@test-timecamp.com")
     excludeRegex: ""  # Optional: Regex to exclude users (e.g., 'department="Other"')
     changeGroupsRegex: ""  # Optional: Regex to transform group paths (e.g. 'pattern|||replacement')
+    prepareTransformConfig: ""  # Optional: JSON string or path to transform config
     sslVerify: false
     useIsSupervisorRole: false  # Use is_supervisor boolean field to determine supervisor role
   

@@ -484,6 +484,102 @@ class TestPrepareTimeCampUsers:
         emails = [u['timecamp_email'] for u in result]
         assert emails == sorted(emails)
 
+    def test_prepare_users_with_transform_config(self, mock_timecamp_config, tmp_path):
+        """Test applying prepare transform config before processing."""
+        transform_config = {
+            "filter": {
+                "and": [
+                    {
+                        "property": "department",
+                        "string": {"starts_with": "IT/"}
+                    },
+                    {
+                        "property": "raw_data.customField4932",
+                        "string": {"equals": "yes"}
+                    }
+                ]
+            },
+            "transform": [
+                {
+                    "property": "department",
+                    "action": "replace_all",
+                    "value": ""
+                }
+            ]
+        }
+        config_path = tmp_path / "transform.json"
+        config_path.write_text(json.dumps(transform_config))
+        mock_timecamp_config.prepare_transform_config = str(config_path)
+
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Match User',
+                    'email': 'match@test.com',
+                    'status': 'active',
+                    'department': 'IT/Recruiting',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'customField4932': 'yes'}
+                },
+                {
+                    'external_id': 'user-2',
+                    'name': 'No Match',
+                    'email': 'nomatch@test.com',
+                    'status': 'active',
+                    'department': 'IT/Recruiting',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'customField4932': 'no'}
+                }
+            ]
+        }
+
+        result = prepare_timecamp_users(source_data, mock_timecamp_config)
+
+        matched_user = next(u for u in result if u['timecamp_email'] == 'match@test.com')
+        unmatched_user = next(u for u in result if u['timecamp_email'] == 'nomatch@test.com')
+
+        assert matched_user['timecamp_groups_breadcrumb'] == ''
+        assert unmatched_user['timecamp_groups_breadcrumb'] == 'IT/Recruiting'
+
+    def test_prepare_users_puts_entire_object_in_raw_data(self, mock_timecamp_config):
+        """Test that the entire source object is put inside raw_data field."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Test User',
+                    'email': 'test@example.com',
+                    'status': 'active',
+                    'department': 'IT',
+                    'job_title': 'Developer',
+                    'custom_field': 'custom_value',
+                    'supervisor_id': '',
+                    'original_raw': {'id': 123}
+                }
+            ]
+        }
+        
+        result = prepare_timecamp_users(source_data, mock_timecamp_config)
+        
+        user = result[0]
+        # Check standard TimeCamp fields
+        assert user['timecamp_email'] == 'test@example.com'
+        
+        # Check that extra fields are NOT at the top level anymore
+        assert 'custom_field' not in user
+        assert 'original_raw' not in user
+        
+        # Check that entire object is in raw_data
+        assert 'raw_data' in user
+        raw_data = user['raw_data']
+        assert raw_data['external_id'] == 'user-1'
+        assert raw_data['name'] == 'Test User'
+        assert raw_data['custom_field'] == 'custom_value'
+        assert raw_data['original_raw'] == {'id': 123}
+
 
 class TestRegexExclusion:
     """Tests for regex exclusion logic."""
@@ -567,4 +663,3 @@ class TestRegexExclusion:
         result = get_users_to_exclude(users, mock_timecamp_config)
         assert len(result) == 1
         assert 'test@test.com' in result
-

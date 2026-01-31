@@ -194,9 +194,12 @@ class TestTimeCampSynchronizer:
                 'is_enabled': True
             }
         ]
-        mock_timecamp_api.get_additional_emails.return_value = {}
-        mock_timecamp_api.get_external_ids.return_value = {1001: 'ext-123'}
-        mock_timecamp_api.get_manually_added_statuses.return_value = {}
+        mock_timecamp_api.get_user_settings_bulk.return_value = {
+            'additional_email': {},
+            'external_id': {1001: 'ext-123'},
+            'added_manually': {},
+            'disabled_user': {}
+        }
         mock_timecamp_api.get_user_roles.return_value = {}
         
         timecamp_users = [
@@ -437,6 +440,79 @@ class TestTimeCampSynchronizer:
         )
         
         # Should move to disabled group
+        mock_timecamp_api.update_user.assert_called_with(
+            1001, {'groupId': 999}, '100'
+        )
+
+    def test_handle_deactivations_moves_already_disabled_user(self, mock_timecamp_api, mock_timecamp_config):
+        """Test moving already disabled users to disabled group regardless of added_manually."""
+        mock_timecamp_config.disabled_users_group_id = 999
+        mock_timecamp_config.disable_manual_user_updates = True
+
+        timecamp_users = []
+        tc_users_by_email = {
+            'disabled@test.com': {
+                'user_id': '1001',
+                'email': 'disabled@test.com',
+                'is_enabled': False,
+                'group_id': '100'
+            }
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._handle_deactivations(
+            timecamp_users, tc_users_by_email, {},
+            set(), {1001: True}, dry_run=False
+        )
+
+        mock_timecamp_api.update_user.assert_called_with(
+            1001, {'groupId': 999}, '100'
+        )
+
+    def test_handle_deactivations_skips_move_when_already_in_disabled_group(self, mock_timecamp_api, mock_timecamp_config):
+        """Test skipping move when user is already in disabled group."""
+        mock_timecamp_config.disabled_users_group_id = 999
+
+        timecamp_users = []
+        tc_users_by_email = {
+            'disabled@test.com': {
+                'user_id': '1001',
+                'email': 'disabled@test.com',
+                'is_enabled': False,
+                'group_id': '999'
+            }
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._handle_deactivations(
+            timecamp_users, tc_users_by_email, {},
+            set(), {}, dry_run=False
+        )
+
+        mock_timecamp_api.update_user.assert_not_called()
+
+    def test_handle_deactivations_disable_user_deactivation_moves_only(self, mock_timecamp_api, mock_timecamp_config):
+        """Test skipping deactivation but moving when disable_user_deactivation is enabled."""
+        mock_timecamp_config.disable_user_deactivation = True
+        mock_timecamp_config.disabled_users_group_id = 999
+
+        timecamp_users = []
+        tc_users_by_email = {
+            'deactivated@test.com': {
+                'user_id': '1001',
+                'email': 'deactivated@test.com',
+                'is_enabled': True,
+                'group_id': '100'
+            }
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._handle_deactivations(
+            timecamp_users, tc_users_by_email, {},
+            set(), {}, dry_run=False
+        )
+
+        mock_timecamp_api.update_user_setting.assert_not_called()
         mock_timecamp_api.update_user.assert_called_with(
             1001, {'groupId': 999}, '100'
         )

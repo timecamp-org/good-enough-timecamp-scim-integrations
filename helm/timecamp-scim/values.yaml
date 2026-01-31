@@ -154,6 +154,7 @@ config:
     disableNewUsers: false
     disableExternalIdSync: false
     disableAdditionalEmailSync: false
+    updateEmailOnExternalId: false
     disableManualUserUpdates: false
     useJobTitleNameUsers: false
     useJobTitleNameGroups: false

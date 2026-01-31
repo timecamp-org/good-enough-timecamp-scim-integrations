@@ -162,6 +162,20 @@ class TestTimeCampAPI:
         assert mock_request.called
         call_kwargs = mock_request.call_args[1]
         assert 'display_name' in call_kwargs['json']
+
+    @patch('common.api.requests.request')
+    def test_update_user_email(self, mock_request, mock_timecamp_config):
+        """Test updating user email."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_request.return_value = mock_response
+        
+        api = TimeCampAPI(mock_timecamp_config)
+        api.update_user(1001, {'email': 'updated@test.com'}, 100)
+        
+        call_kwargs = mock_request.call_args[1]
+        assert 'email' in call_kwargs['json']
+        assert call_kwargs['json']['email'] == 'updated@test.com'
     
     @patch('common.api.requests.request')
     def test_update_user_group(self, mock_request, mock_timecamp_config):

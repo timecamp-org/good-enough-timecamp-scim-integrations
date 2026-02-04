@@ -1,14 +1,12 @@
 # TimeCamp SCIM Integrations
 
-Scripts to synchronize users from various HR/SCIM systems to TimeCamp using TimeCamp REST API. Currently supports:
+Scripts to synchronize users from various HR/SCIM using TimeCamp REST API. Currently supports:
 - LDAP
 - Azure AD / Microsoft Entra ID
 - BambooHR
 - Factorial
 
 ## Quick Start
-
-Follow these steps to sync your SCIM system data with TimeCamp:
 
 ```sh
 # 1. Create your .env file using the provided template (look at docs/.env.example for reference)
@@ -26,9 +24,7 @@ python timecamp_sync_users.py
 python timecamp_sync_users.py --dry-run # Simulate without making changes
 ```
 
-**⚠️ BILLING WARNING**
-
-AUTOMATIC SEAT UPGRADES: If your TimeCamp account doesn't have enough paid seats for all users being synced, additional seats will be automatically added and charged to your account. Review your user count before proceeding to avoid unexpected billing charges.
+> **⚠️ BILLING WARNING** AUTOMATIC SEAT UPGRADES: If your TimeCamp account doesn't have enough paid seats for all users being synced, additional seats will be automatically added and charged to your account. Review your user count before proceeding to avoid unexpected billing charges.
 
 ## Architecture
 
@@ -39,9 +35,9 @@ flowchart LR
     timecamp_users -->|timecamp_sync_users.py| timecamp[TimeCamp]
 ```
 
-1. Fetch users from SCIM system to json file (fetch_*.py) ► output: var/users.json
-2. Convert the SCIM data format to match TimeCamp's requirements and do filtering/transforming (prepare_timecamp_json_from_fetch.py) ► input: var/users.json ► output: var/timecamp_users.json
-3. Upload the transformed data to TimeCamp using TimeCamp REST API (timecamp_sync_users.py) ► input: var/timecamp_users.json
+1. Fetch users from SCIM system to json file (`fetch_*.py`) ► output: `var/users.json`
+2. Convert the SCIM data format to match TimeCamp's requirements and do filtering/transforming (`prepare_timecamp_json_from_fetch.py`) ► input: `var/users.json` ► output: `var/timecamp_users.json`
+3. Upload the transformed data to TimeCamp using TimeCamp REST API (`timecamp_sync_users.py`) ► input: `var/timecamp_users.json`
 
 ## Documentation
 

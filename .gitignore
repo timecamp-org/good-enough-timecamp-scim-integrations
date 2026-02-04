@@ -16,3 +16,4 @@ var/*
 var/
 .idea/
 CLAUDE.md
+htmlcov/

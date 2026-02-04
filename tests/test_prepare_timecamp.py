@@ -491,7 +491,7 @@ class TestPrepareTimeCampUsers:
                 "and": [
                     {
                         "property": "department",
-                        "string": {"starts_with": "IT/"}
+                        "string": {"starts_with": "Operations/"}
                     },
                     {
                         "property": "raw_data.customField4932",
@@ -518,7 +518,7 @@ class TestPrepareTimeCampUsers:
                     'name': 'Match User',
                     'email': 'match@test.com',
                     'status': 'active',
-                    'department': 'IT/Recruiting',
+                    'department': 'Operations/Recruiting',
                     'job_title': '',
                     'supervisor_id': '',
                     'raw_data': {'customField4932': 'yes'}
@@ -528,7 +528,7 @@ class TestPrepareTimeCampUsers:
                     'name': 'No Match',
                     'email': 'nomatch@test.com',
                     'status': 'active',
-                    'department': 'IT/Recruiting',
+                    'department': 'Operations/Recruiting',
                     'job_title': '',
                     'supervisor_id': '',
                     'raw_data': {'customField4932': 'no'}
@@ -542,7 +542,133 @@ class TestPrepareTimeCampUsers:
         unmatched_user = next(u for u in result if u['timecamp_email'] == 'nomatch@test.com')
 
         assert matched_user['timecamp_groups_breadcrumb'] == ''
-        assert unmatched_user['timecamp_groups_breadcrumb'] == 'IT/Recruiting'
+        assert unmatched_user['timecamp_groups_breadcrumb'] == 'Operations/Recruiting'
+
+    def test_prepare_users_with_transform_config_not_filter(self, mock_timecamp_config, tmp_path):
+        """Test applying NOT filter in transform config."""
+        transform_config = {
+            "filter": {
+                "and": [
+                    {
+                        "property": "department",
+                        "string": {"starts_with": "People/"}
+                    },
+                    {
+                        "not": {
+                            "or": [
+                                {
+                                    "property": "raw_data.employmentStatus",
+                                    "string": {"starts_with": "Vendors:"}
+                                },
+                                {
+                                    "property": "raw_data.employmentStatus",
+                                    "string": {"starts_with": "Vendor:"}
+                                },
+                                {
+                                    "property": "raw_data.employmentStatus",
+                                    "string": {"starts_with": "Freelance"}
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "transform": [
+                {
+                    "property": "department",
+                    "action": "replace_all",
+                    "value": ""
+                }
+            ]
+        }
+        config_path = tmp_path / "transform-not.json"
+        config_path.write_text(json.dumps(transform_config))
+        mock_timecamp_config.prepare_transform_config = str(config_path)
+
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Match User',
+                    'email': 'match@test.com',
+                    'status': 'active',
+                    'department': 'People/HR',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'employmentStatus': 'Employee'}
+                },
+                {
+                    'external_id': 'user-2',
+                    'name': 'Excluded User',
+                    'email': 'excluded@test.com',
+                    'status': 'active',
+                    'department': 'People/HR',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'employmentStatus': 'Vendor: Acme'}
+                }
+            ]
+        }
+
+        result = prepare_timecamp_users(source_data, mock_timecamp_config)
+
+        matched_user = next(u for u in result if u['timecamp_email'] == 'match@test.com')
+        excluded_user = next(u for u in result if u['timecamp_email'] == 'excluded@test.com')
+
+        assert matched_user['timecamp_groups_breadcrumb'] == ''
+        assert excluded_user['timecamp_groups_breadcrumb'] == 'People/HR'
+
+    def test_prepare_users_with_transform_config_exclude(self, mock_timecamp_config, tmp_path):
+        """Test excluding users via prepare transform config."""
+        transform_config = {
+            "exclude": {
+                "or": [
+                    {
+                        "property": "raw_data.employmentStatus",
+                        "string": {"starts_with": "Vendors:"}
+                    },
+                    {
+                        "property": "raw_data.employmentStatus",
+                        "string": {"starts_with": "Vendor:"}
+                    }
+                ]
+            }
+        }
+        config_path = tmp_path / "transform-exclude.json"
+        config_path.write_text(json.dumps(transform_config))
+        mock_timecamp_config.prepare_transform_config = str(config_path)
+
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Keep User',
+                    'email': 'keep@test.com',
+                    'status': 'active',
+                    'department': 'Engineering/QA',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'employmentStatus': 'Employee'}
+                },
+                {
+                    'external_id': 'user-2',
+                    'name': 'Exclude User',
+                    'email': 'excluded@test.com',
+                    'status': 'active',
+                    'department': 'Engineering/QA',
+                    'job_title': '',
+                    'supervisor_id': '',
+                    'raw_data': {'employmentStatus': 'Vendors: VendorCo'}
+                }
+            ]
+        }
+
+        result = prepare_timecamp_users(source_data, mock_timecamp_config)
+        emails = [u['timecamp_email'] for u in result]
+
+        assert 'keep@test.com' in emails
+        assert 'excluded@test.com' not in emails
+        assert len(emails) == 1
 
     def test_prepare_users_puts_entire_object_in_raw_data(self, mock_timecamp_config):
         """Test that the entire source object is put inside raw_data field."""

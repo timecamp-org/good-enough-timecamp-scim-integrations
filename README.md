@@ -11,13 +11,16 @@ Scripts to synchronize users from various HR/SCIM systems to TimeCamp using Time
 Follow these steps to sync your SCIM system data with TimeCamp:
 
 ```sh
-# 1. Create your .env file using the provided template
+# 1. Create your .env file using the provided template (look at docs/.env.example for reference)
+
 # 2. Pull employee data from your SCIM system to json file (replace with your specific SCIM fetch script if different)
 python fetch_ldap.py
+
 # 3. Convert the SCIM data format to match TimeCamp's requirements
 python prepare_timecamp_json_from_fetch.py
 python scripts/display_timecamp_tree.py > var/structure.txt # Optional: preview the organizational structure
 python scripts/display_timecamp_tree.py --html var/structure.html # Optional: generate HTML visualization
+
 # 4. Upload the transformed data to TimeCamp using TimeCamp REST API
 python timecamp_sync_users.py
 python timecamp_sync_users.py --dry-run # Simulate without making changes
@@ -42,7 +45,7 @@ flowchart LR
 
 ## Documentation
 
-- **[docs/env.example](docs/env.example)** - Environment variable template
+- **[docs/env.example](docs/env.example)** - Environment variable configuration list ⚠️
 - **[docs/fetch_azure.md](docs/fetch_azure.md)** - Fetching users from Azure AD / Entra ID
 - **[docs/fetch_ldap.md](docs/fetch_ldap.md)** - Fetching users from LDAP
 - **[docs/docker.md](docs/docker.md)** - Docker and compose usage

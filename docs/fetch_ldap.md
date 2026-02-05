@@ -68,3 +68,15 @@ python3 fetch_ldap.py
 python3 prepare_timecamp_json_from_fetch.py
 python3 scripts/display_timecamp_tree.py > sample_structure.txt
 ```
+
+## LDAP Configuration
+
+- Set the environment variables: `LDAP_HOST`, `LDAP_PORT`, `LDAP_DOMAIN`, `LDAP_DN`, `LDAP_USERNAME`, and `LDAP_PASSWORD`
+- Optionally set `LDAP_FILTER` to customize the user filter query (default filter includes only active users)
+- Optionally set `LDAP_PAGE_SIZE` to control the number of results retrieved per page (default is 1000)
+- Optionally set `LDAP_USE_SAMACCOUNTNAME=true` to generate email addresses from sAMAccountName rather than using the mail attribute
+- Optionally set `LDAP_USE_OU_STRUCTURE=true` to use the organizational unit (OU) structure from user's DN as the department value instead of the department attribute
+- Optionally set `LDAP_SUPERVISOR_GROUP_NAME` to specify an LDAP group name (e.g. `timecamp_mgr`) - when set, users belonging to this group will have `force_supervisor_role=true` set in the output
+- Optionally set `LDAP_GLOBAL_ADMIN_GROUP_NAME` to specify an LDAP group name (e.g. `timecamp_admin`) - when set, users belonging to this group will have `force_global_admin_role=true` set in the output
+- Run `python ldap_fetch.py` to fetch users from LDAP
+- Note: When using sAMAccountName for email, the original mail attribute is always included as `real_email` field if available

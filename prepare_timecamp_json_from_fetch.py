@@ -186,15 +186,21 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
         transform_config = load_transform_config(config.prepare_transform_config)
         transformed_users = []
         transformed_count = 0
+        excluded_count = 0
 
         for user in source_data['users']:
             transformed_user, changed = apply_transform_config(user, transform_config)
+            if transformed_user is None:
+                excluded_count += 1
+                continue
             transformed_users.append(transformed_user)
             if changed:
                 transformed_count += 1
 
         if transformed_count:
             logger.info(f"Applied prepare transforms to {transformed_count} users")
+        if excluded_count:
+            logger.info(f"Excluded {excluded_count} users by prepare transform config")
 
         source_data = {**source_data, 'users': transformed_users}
 
@@ -383,15 +389,21 @@ def main():
             output_transform = load_transform_config(config.prepare_transform_config)
             transformed_users = []
             transformed_count = 0
+            excluded_count = 0
 
             for user in timecamp_users:
                 transformed_user, changed = apply_transform_config(user, output_transform)
+                if transformed_user is None:
+                    excluded_count += 1
+                    continue
                 transformed_users.append(transformed_user)
                 if changed:
                     transformed_count += 1
 
             if transformed_count:
                 logger.info(f"Applied prepare transforms to {transformed_count} prepared users")
+            if excluded_count:
+                logger.info(f"Excluded {excluded_count} prepared users by transform config")
 
             timecamp_users = transformed_users
 

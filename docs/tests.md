@@ -2,6 +2,104 @@
 
 This document provides comprehensive instructions for running, writing, and maintaining tests for the TimeCamp SCIM Integration project.
 
+## Quick Start
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run all tests (214 tests, ~0.5s execution)
+pytest
+
+# Run with coverage report
+pytest --cov=. --cov-report=html
+
+# View coverage report
+open htmlcov/index.html
+```
+
+## Test Cases
+
+- User changed name ✅
+- User changed group ✅
+- User added ✅
+- User disabled ✅
+- User removed ✅
+- User added as inactive ✅
+- User added with empty department ✅
+- Group name with whitespaces near / ✅
+- Setting enabled to add external_id to user name ✅
+- Don't send automatic email when user is created ✅
+- Setting and updating real user email as second email setting in TimeCamp ✅
+- Update user roles based on supervisor ✅
+- Update user external id ✅
+- Matching users based on TC email or TC additional email ✅
+- If setting TIMECAMP_DISABLE_NEW_USERS=true create only groups that could be potentialy created ✅
+- Creating TimeCamp groups based on supervisor ✅
+   - User A (no supervisor) → Group A
+   - User B (supervisor: A) → Group "A/B"
+   - User C (supervisor: B) → Group "A/B"
+   - User D (supervisor: A) → Group "A"
+   - User E (no supervisor, not a supervisor) → root group id
+- Remove empty groups
+- S3-compatible storage for JSON files ✅
+- Move disabled users to specific group (TIMECAMP_DISABLED_USERS_GROUP_ID) ✅
+- Re-enable disabled users ✅
+- Set added_manually=0 for user after any update to ensure proper tracking ✅
+
+
+## Test Suite Overview
+
+- **214 total tests** - All passing ✅
+- **46% overall coverage** - Focused on critical business logic
+- **100% coverage** on utilities and configuration loading
+- **88% coverage** on API wrapper
+- **Fast execution** - All tests complete in ~0.5 seconds
+
+## What's Tested
+
+#### Configuration Testing (35 tests)
+All environment variables from `samples/env.example`:
+- Group structure modes (department/supervisor/hybrid)
+- User name formatting (job titles, external IDs)
+- Email handling (domain replacement, real email)
+- Department skip prefixes (single/multiple/paths)
+- All sync disable flags
+- Role determination options
+- User management (ignored users, disabled group)
+
+#### Pipeline Integration (19 tests)
+End-to-end verification of `users.json` → `timecamp_users.json`:
+- Output validation for each configuration
+- Complex real-world scenarios
+- LDAP-specific use cases
+- Multi-level supervisor hierarchies
+
+#### Component Testing (160 tests)
+- Azure AD fetching and transformation (22 tests)
+- Data preparation logic (32 tests)
+- Supervisor group processing (21 tests)
+- User synchronization (21 tests)
+- Time off synchronization (9 tests)
+- API wrapper functionality (22 tests)
+- Common utilities (31 tests)
+
+### Running Specific Tests
+
+```bash
+# Configuration tests
+pytest tests/test_config_integration.py -v
+
+# Pipeline integration tests
+pytest tests/test_pipeline_integration.py -v
+
+# User synchronization tests
+pytest tests/test_sync_users.py -v
+
+# Run tests in parallel
+pytest -n auto
+```
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)

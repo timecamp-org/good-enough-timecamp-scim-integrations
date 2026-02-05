@@ -39,12 +39,19 @@ def apply_transform_config(data: Any, config: Optional[Dict[str, Any]]) -> Tuple
         output: List[Any] = []
         for item in data:
             updated_item, changed = apply_transform_config(item, config)
+            if updated_item is None and changed:
+                changed_any = True
+                continue
             output.append(updated_item)
             changed_any = changed_any or changed
         return output, changed_any
 
     if not isinstance(data, dict):
         return data, False
+
+    exclude_config = config.get("exclude")
+    if exclude_config and _matches_filter(data, exclude_config):
+        return None, True
 
     if not _matches_filter(data, config.get("filter")):
         return data, False
@@ -81,6 +88,14 @@ def _matches_filter(data: Dict[str, Any], filter_config: Optional[Dict[str, Any]
     if "or" in filter_config:
         rules = filter_config.get("or", [])
         return any(_matches_filter(data, rule) for rule in rules)
+
+    if "not" in filter_config:
+        rule = filter_config.get("not")
+        if isinstance(rule, list):
+            return not any(_matches_filter(data, item) for item in rule)
+        if isinstance(rule, dict):
+            return not _matches_filter(data, rule)
+        return False
 
     property_path = filter_config.get("property")
     string_rules = filter_config.get("string")

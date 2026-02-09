@@ -674,15 +674,14 @@ def fetch_ldap_users():
                 users.extend(missing_supervisors)
                 logger.info(f"Total users including missing supervisors: {len(users)}")
             
-            # Log summary
+            # Log summary with first 2 users as JSON (email obfuscated)
             logger.info(f"=== LDAP fetch results: {len(users)} users total ===")
             for i, user in enumerate(users[:2]):
-                logger.info(
-                    f"  User {i+1}: name={user.get('name', '')}, "
-                    f"email={obfuscate_email(user.get('email', ''))}, "
-                    f"department={user.get('department', '')}, "
-                    f"status={user.get('status', '')}"
-                )
+                preview = dict(user)
+                preview['email'] = obfuscate_email(preview.get('email', ''))
+                if preview.get('real_email'):
+                    preview['real_email'] = obfuscate_email(preview['real_email'])
+                logger.info(f"  User {i+1}: {json.dumps(preview, ensure_ascii=False)}")
             if len(users) > 2:
                 logger.info(f"  ... and {len(users) - 2} more users")
 

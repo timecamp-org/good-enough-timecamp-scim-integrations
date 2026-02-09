@@ -20,6 +20,9 @@ from common.transform_config import load_transform_config, apply_transform_confi
 # Load environment variables
 load_dotenv()
 
+# Version
+VERSION = "1.3.2"
+
 # Initialize logger
 logger = setup_logger('prepare_timecamp_data')
 
@@ -307,68 +310,65 @@ def main():
         # Load configuration
         # For preparation stage, we don't strictly need API credentials as we are just processing local data
         config = TimeCampConfig.from_env(validate_auth=False)
+        logger.info(f"=== prepare_timecamp_json_from_fetch v{VERSION} ===")
         logger.info("Loaded configuration from environment")
-        
-        # Log all configuration options to show they're being considered
+
+        # Log environment variables actually used by this script
+        logger.info("=== Environment variables ===")
+        logger.info(f"  TIMECAMP_USE_SUPERVISOR_GROUPS = {config.use_supervisor_groups}")
+        logger.info(f"  TIMECAMP_USE_DEPARTMENT_GROUPS = {config.use_department_groups}")
+        logger.info(f"  TIMECAMP_USE_JOB_TITLE_NAME_USERS = {config.use_job_title_name_users}")
+        logger.info(f"  TIMECAMP_USE_JOB_TITLE_NAME_GROUPS = {config.use_job_title_name_groups}")
+        logger.info(f"  TIMECAMP_SHOW_EXTERNAL_ID = {config.show_external_id}")
+        logger.info(f"  TIMECAMP_SKIP_DEPARTMENTS = {config.skip_departments or '(not set)'}")
+        logger.info(f"  TIMECAMP_REPLACE_EMAIL_DOMAIN = {config.replace_email_domain or '(not set)'}")
+        logger.info(f"  TIMECAMP_EXCLUDE_REGEX = {config.exclude_regex or '(not set)'}")
+        logger.info(f"  TIMECAMP_CHANGE_GROUPS_REGEX = {config.change_groups_regex or '(not set)'}")
+        logger.info(f"  TIMECAMP_PREPARE_TRANSFORM_CONFIG = {config.prepare_transform_config or '(not set)'}")
+        logger.info(f"  TIMECAMP_USE_IS_SUPERVISOR_ROLE = {config.use_is_supervisor_role}")
+        logger.info("=============================")
+
+        # Log configuration interpretation
         logger.info("Configuration settings:")
-        logger.info(f"  - TIMECAMP_USE_SUPERVISOR_GROUPS: {config.use_supervisor_groups}")
-        logger.info(f"  - TIMECAMP_USE_DEPARTMENT_GROUPS: {config.use_department_groups}")
         if config.use_supervisor_groups and config.use_department_groups:
-            logger.info("    → Using HYBRID mode: Department groups with supervisor subgroups")
+            logger.info("  → Using HYBRID mode: Department groups with supervisor subgroups")
         elif config.use_supervisor_groups:
-            logger.info("    → Using SUPERVISOR-ONLY mode: Groups based on supervisor hierarchy")
+            logger.info("  → Using SUPERVISOR-ONLY mode: Groups based on supervisor hierarchy")
         else:
-            logger.info("    → Using DEPARTMENT-ONLY mode: Traditional department-based groups")
-        
-        logger.info(f"  - TIMECAMP_USE_JOB_TITLE_NAME_USERS: {config.use_job_title_name_users}")
+            logger.info("  → Using DEPARTMENT-ONLY mode: Traditional department-based groups")
+
         if config.use_job_title_name_users:
-            logger.info("    → User names will be formatted as: 'Job Title [Name]'")
-            
-        logger.info(f"  - TIMECAMP_USE_JOB_TITLE_NAME_GROUPS: {config.use_job_title_name_groups}")
+            logger.info("  → User names will be formatted as: 'Job Title [Name]'")
         if config.use_job_title_name_groups:
-            logger.info("    → Supervisor group names will be formatted as: 'Job Title [Name]'")
-        
-        logger.info(f"  - TIMECAMP_SHOW_EXTERNAL_ID: {config.show_external_id}")
+            logger.info("  → Supervisor group names will be formatted as: 'Job Title [Name]'")
         if config.show_external_id:
-            logger.info("    → External IDs will be appended to user names")
-            
-        logger.info(f"  - TIMECAMP_SKIP_DEPARTMENTS: '{config.skip_departments}'")
+            logger.info("  → External IDs will be appended to user names")
         if config.skip_departments:
             prefixes = [p.strip() for p in config.skip_departments.split(',') if p.strip()]
             if len(prefixes) == 1:
-                logger.info(f"    → Will skip department prefix: '{prefixes[0]}'")
+                logger.info(f"  → Will skip department prefix: '{prefixes[0]}'")
             else:
-                logger.info(f"    → Will skip department prefixes: {prefixes}")
-            
-        logger.info(f"  - TIMECAMP_REPLACE_EMAIL_DOMAIN: '{config.replace_email_domain}'")
+                logger.info(f"  → Will skip department prefixes: {prefixes}")
         if config.replace_email_domain:
-            logger.info(f"    → Will replace email domains with: '{config.replace_email_domain}'")
-            
-        logger.info(f"  - TIMECAMP_EXCLUDE_REGEX: '{config.exclude_regex}'")
+            logger.info(f"  → Will replace email domains with: '{config.replace_email_domain}'")
         if config.exclude_regex:
-            logger.info(f"    → Will exclude users matching regex against format: department=\"DEPT\" job_title=\"TITLE\" email=\"EMAIL\"")
-
-        logger.info(f"  - TIMECAMP_CHANGE_GROUPS_REGEX: '{config.change_groups_regex}'")
+            logger.info(f"  → Will exclude users matching regex against format: department=\"DEPT\" job_title=\"TITLE\" email=\"EMAIL\"")
         if config.change_groups_regex:
             if '|||' in config.change_groups_regex:
                 if ';;;' in config.change_groups_regex:
-                    logger.info(f"    → Will transform group paths using multiple regex rules separated by ;;;")
+                    logger.info(f"  → Will transform group paths using multiple regex rules separated by ;;;")
                 else:
-                    logger.info(f"    → Will transform group paths using regex substitution (pattern|||replacement)")
+                    logger.info(f"  → Will transform group paths using regex substitution (pattern|||replacement)")
             else:
-                logger.warning(f"    → TIMECAMP_CHANGE_GROUPS_REGEX format seems invalid (missing '|||' separator)")
-
-        logger.info(f"  - TIMECAMP_PREPARE_TRANSFORM_CONFIG: '{config.prepare_transform_config}'")
+                logger.warning(f"  → TIMECAMP_CHANGE_GROUPS_REGEX format seems invalid (missing '|||' separator)")
         if config.prepare_transform_config:
-            logger.info("    → Will apply filter/transform rules to source users before preparation")
-
-        logger.info(f"  - TIMECAMP_USE_IS_SUPERVISOR_ROLE: {config.use_is_supervisor_role}")
+            logger.info("  → Will apply filter/transform rules to source users before preparation")
         if config.use_is_supervisor_role:
-            logger.info("    → Will determine supervisor role from 'is_supervisor' boolean field")
+            logger.info("  → Will determine supervisor role from 'is_supervisor' boolean field")
         else:
-            logger.info("    → Will determine role from 'role_id' field (default behavior)")
-        
-        logger.info("  - Force role fields:")
+            logger.info("  → Will determine role from 'role_id' field (default behavior)")
+
+        logger.info("  Force role fields:")
         logger.info("    → force_global_admin_role=true → Administrator role (highest priority)")
         logger.info("    → force_supervisor_role=true → Supervisor role (if any exist, disables other supervisor logic)")
             

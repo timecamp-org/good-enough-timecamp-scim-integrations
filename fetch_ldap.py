@@ -8,6 +8,57 @@ from ldap.controls import SimplePagedResultsControl
 
 logger = setup_logger()
 
+
+def obfuscate_secret(value):
+    """Obfuscate a secret value, showing only first and last 2 characters."""
+    if not value:
+        return "(not set)"
+    value = str(value)
+    if len(value) <= 4:
+        return "****"
+    return value[:2] + "*" * (len(value) - 4) + value[-2:]
+
+
+def obfuscate_email(email):
+    """Obfuscate the middle part of an email address. E.g. jo***oe@example.com"""
+    if not email or '@' not in email:
+        return email or ""
+    local, domain = email.split('@', 1)
+    if len(local) <= 2:
+        local_obfuscated = local[0] + "***"
+    else:
+        local_obfuscated = local[0] + "***" + local[-1]
+    return f"{local_obfuscated}@{domain}"
+
+
+def log_config(config):
+    """Log all environment variable values used by fetch_ldap (secrets obfuscated)."""
+    logger.info("=== fetch_ldap configuration ===")
+    logger.info(f"  LDAP_HOST = {config['host']}")
+    logger.info(f"  LDAP_PORT = {config['port']}")
+    logger.info(f"  LDAP_DOMAIN = {config['domain']}")
+    logger.info(f"  LDAP_DN = {config['dn']}")
+    logger.info(f"  LDAP_USERNAME = {obfuscate_secret(config['username'])}")
+    logger.info(f"  LDAP_PASSWORD = {obfuscate_secret(config['password'])}")
+    logger.info(f"  LDAP_FILTER = {config['filter']}")
+    logger.info(f"  LDAP_PAGE_SIZE = {config['page_size']}")
+    logger.info(f"  LDAP_USE_SAMACCOUNTNAME = {config['use_samaccountname']}")
+    logger.info(f"  LDAP_USE_SAMACCOUNTNAME_ONLY = {config['use_samaccountname_only']}")
+    logger.info(f"  LDAP_USE_OU_STRUCTURE = {config['use_ou_structure']}")
+    logger.info(f"  LDAP_USE_OU_DESCRIPTION = {config['use_ou_description']}")
+    logger.info(f"  LDAP_USE_REAL_EMAIL_AS_EMAIL = {config['use_real_email_as_email']}")
+    logger.info(f"  LDAP_USE_WINDOWS_LOGIN_EMAIL = {config['use_windows_login_email']}")
+    logger.info(f"  LDAP_EMAIL_DOMAIN = {config['email_domain'] or '(not set)'}")
+    logger.info(f"  LDAP_USE_SSL = {config['use_ssl']}")
+    logger.info(f"  LDAP_USE_START_TLS = {config['use_start_tls']}")
+    logger.info(f"  LDAP_SSL_VERIFY = {config['ssl_verify']}")
+    logger.info(f"  LDAP_SUPERVISOR_GROUP_NAME = {config['supervisor_group_name'] or '(not set)'}")
+    logger.info(f"  LDAP_GLOBAL_ADMIN_GROUP_NAME = {config['global_admin_group_name'] or '(not set)'}")
+    logger.info(f"  TIMECAMP_USE_SUPERVISOR_GROUPS = {config['use_supervisor_groups']}")
+    logger.info(f"  TIMECAMP_REPLACE_EMAIL_DOMAIN = {config['replace_email_domain'] or '(not set)'}")
+    logger.info("================================")
+
+
 def normalize_text(text):
     """Ensure text has proper characters instead of escaped Unicode."""
     if not text:
@@ -602,7 +653,8 @@ def fetch_ldap_users():
     try:
         # Get configuration
         config = get_ldap_config()
-        
+        log_config(config)
+
         # Connect to LDAP server
         ldap_connection = connect_to_ldap(config)
         
@@ -622,6 +674,17 @@ def fetch_ldap_users():
                 users.extend(missing_supervisors)
                 logger.info(f"Total users including missing supervisors: {len(users)}")
             
+            # Log summary with first 2 users as JSON (email obfuscated)
+            logger.info(f"=== LDAP fetch results: {len(users)} users total ===")
+            for i, user in enumerate(users[:2]):
+                preview = dict(user)
+                preview['email'] = obfuscate_email(preview.get('email', ''))
+                if preview.get('real_email'):
+                    preview['real_email'] = obfuscate_email(preview['real_email'])
+                logger.info(f"  User {i+1}: {json.dumps(preview, ensure_ascii=False)}")
+            if len(users) > 2:
+                logger.info(f"  ... and {len(users) - 2} more users")
+
             # Save users to file
             save_users_to_file(users)
             

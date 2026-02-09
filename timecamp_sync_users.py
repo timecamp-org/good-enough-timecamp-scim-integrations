@@ -21,6 +21,16 @@ load_dotenv()
 logger = setup_logger('timecamp_sync_v2')
 
 
+def obfuscate_secret(value):
+    """Obfuscate a secret value, showing only first and last 2 characters."""
+    if not value:
+        return "(not set)"
+    value = str(value)
+    if len(value) <= 4:
+        return "****"
+    return value[:2] + "*" * (len(value) - 4) + value[-2:]
+
+
 class TimeCampSynchronizer:
     """Handles synchronization of users and groups with TimeCamp."""
     
@@ -600,16 +610,26 @@ def main():
         # Load configuration
         config = TimeCampConfig.from_env()
         logger.info("Loaded configuration")
-        logger.debug(f"Root group ID: {config.root_group_id}")
-        logger.debug(f"Disable new users: {config.disable_new_users}")
-        logger.debug(f"Disable external ID sync: {config.disable_external_id_sync}")
-        logger.debug(f"Disable manual user updates: {config.disable_manual_user_updates}")
-        logger.debug(f"Disable user deactivation: {config.disable_user_deactivation}")
-        logger.debug(f"Disable group updates: {config.disable_group_updates}")
-        logger.debug(f"Disable role updates: {config.disable_role_updates}")
-        logger.debug(f"Disable groups creation: {config.disable_groups_creation}")
-        logger.debug(f"Disabled users group ID: {config.disabled_users_group_id}")
-        logger.debug(f"Ignored user IDs: {config.ignored_user_ids}")
+
+        # Log all environment variables used by this script
+        logger.info("=== timecamp_sync_users configuration ===")
+        logger.info(f"  TIMECAMP_API_KEY = {obfuscate_secret(os.getenv('TIMECAMP_API_KEY'))}")
+        logger.info(f"  TIMECAMP_DOMAIN = {os.getenv('TIMECAMP_DOMAIN', 'app.timecamp.com')}")
+        logger.info(f"  TIMECAMP_SSL_VERIFY = {os.getenv('TIMECAMP_SSL_VERIFY', 'false')}")
+        logger.info(f"  TIMECAMP_ROOT_GROUP_ID = {config.root_group_id}")
+        logger.info(f"  TIMECAMP_DISABLE_GROUPS_CREATION = {config.disable_groups_creation}")
+        logger.info(f"  TIMECAMP_DISABLE_NEW_USERS = {config.disable_new_users}")
+        logger.info(f"  TIMECAMP_DISABLE_GROUP_UPDATES = {config.disable_group_updates}")
+        logger.info(f"  TIMECAMP_DISABLE_ROLE_UPDATES = {config.disable_role_updates}")
+        logger.info(f"  TIMECAMP_DISABLE_EXTERNAL_ID_SYNC = {config.disable_external_id_sync}")
+        logger.info(f"  TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC = {config.disable_additional_email_sync}")
+        logger.info(f"  TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID = {config.update_email_on_external_id}")
+        logger.info(f"  TIMECAMP_DISABLE_MANUAL_USER_UPDATES = {config.disable_manual_user_updates}")
+        logger.info(f"  TIMECAMP_DISABLE_USER_DEACTIVATION = {config.disable_user_deactivation}")
+        logger.info(f"  TIMECAMP_DISABLED_USERS_GROUP_ID = {config.disabled_users_group_id}")
+        logger.info(f"  TIMECAMP_IGNORED_USER_IDS = {config.ignored_user_ids or '(not set)'}")
+        logger.info(f"  TIMECAMP_REPLACE_EMAIL_DOMAIN = {config.replace_email_domain or '(not set)'}")
+        logger.info("==========================================")
         
         # Check if input file exists
         from common.storage import load_json_file, file_exists

@@ -599,3 +599,110 @@ class TestTimeCampSynchronizer:
         assert mock_timecamp_api.get_groups.called
         assert mock_timecamp_api.get_users.called
 
+    def test_remove_empty_groups_deletes_leaf_without_users(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that empty leaf groups are removed."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': 'Empty Group', 'parent_id': '100'},
+        ]
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=False)
+
+        mock_timecamp_api.delete_group.assert_called_once_with(101)
+
+    def test_remove_empty_groups_keeps_groups_with_users(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that groups with users are not removed."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': 'Has Users', 'parent_id': '100'},
+        ]
+        mock_timecamp_api.get_users.return_value = [
+            {'user_id': '1', 'email': 'user@test.com', 'group_id': '101'}
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=False)
+
+        mock_timecamp_api.delete_group.assert_not_called()
+
+    def test_remove_empty_groups_removes_nested_empty_groups(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that nested empty groups are removed bottom-up."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': 'Parent', 'parent_id': '100'},
+            {'group_id': '102', 'name': 'Child', 'parent_id': '101'},
+        ]
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=False)
+
+        # Both should be removed; child first (deeper), then parent
+        assert mock_timecamp_api.delete_group.call_count == 2
+        calls = mock_timecamp_api.delete_group.call_args_list
+        assert calls[0] == call(102)  # child removed first
+        assert calls[1] == call(101)  # then parent
+
+    def test_remove_empty_groups_keeps_parent_with_non_empty_child(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that parent is kept if it has a non-empty child."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': 'Parent', 'parent_id': '100'},
+            {'group_id': '102', 'name': 'Child With Users', 'parent_id': '101'},
+            {'group_id': '103', 'name': 'Empty Child', 'parent_id': '101'},
+        ]
+        mock_timecamp_api.get_users.return_value = [
+            {'user_id': '1', 'email': 'user@test.com', 'group_id': '102'}
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=False)
+
+        # Only Empty Child should be removed; Parent has a remaining child with users
+        mock_timecamp_api.delete_group.assert_called_once_with(103)
+
+    def test_remove_empty_groups_dry_run(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that dry run doesn't delete groups."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': 'Empty Group', 'parent_id': '100'},
+        ]
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=True)
+
+        mock_timecamp_api.delete_group.assert_not_called()
+
+    def test_remove_empty_groups_not_called_when_disabled(self, mock_timecamp_api, mock_timecamp_config, sample_timecamp_users):
+        """Test that remove_empty_groups is not called when config is False."""
+        mock_timecamp_config.remove_empty_groups = False
+        mock_timecamp_config.root_group_id = 100
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'}
+        ]
+        mock_timecamp_api.get_users.return_value = []
+        mock_timecamp_api.add_group.return_value = '101'
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.sync(sample_timecamp_users, dry_run=False)
+
+        mock_timecamp_api.delete_group.assert_not_called()
+

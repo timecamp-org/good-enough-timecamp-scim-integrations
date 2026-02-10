@@ -163,6 +163,7 @@ config:
     excludeRegex: ""  # Optional: Regex to exclude users (e.g., 'department="Other"')
     changeGroupsRegex: ""  # Optional: Regex to transform group paths (e.g. 'pattern|||replacement')
     prepareTransformConfig: ""  # Optional: JSON string or path to transform config
+    removeEmptyGroups: false  # Remove empty groups (no users, no non-empty subgroups) after sync
     sslVerify: false
     useIsSupervisorRole: false  # Use is_supervisor boolean field to determine supervisor role
   

@@ -389,16 +389,20 @@ class TestTimeCampAPI:
     
     @patch('common.api.requests.request')
     def test_delete_group(self, mock_request, mock_timecamp_config):
-        """Test deleting a group."""
+        """Test deleting a group sends group_id in JSON body."""
         mock_response = Mock()
         mock_response.status_code = 200
         mock_request.return_value = mock_response
-        
+
         api = TimeCampAPI(mock_timecamp_config)
         api.delete_group(101)
-        
-        # Should make DELETE request
+
+        # Should make DELETE request to /group (not /group/101)
         assert mock_request.call_args[0][0] == 'DELETE'
+        called_url = mock_request.call_args[0][1]
+        assert called_url.endswith('/group')
+        # group_id should be in the JSON body
+        assert mock_request.call_args[1]['json'] == {"group_id": 101}
 
     def test_init_with_protocol(self, mock_timecamp_config):
         """Test API initialization with protocol in domain."""

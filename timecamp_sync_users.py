@@ -11,7 +11,7 @@ import argparse
 from typing import Dict, List, Any, Set, Tuple, Optional
 from dotenv import load_dotenv
 from common.logger import setup_logger
-from common.utils import TimeCampConfig
+from common.utils import TimeCampConfig, obfuscate_secret
 from common.api import TimeCampAPI
 
 # Load environment variables
@@ -569,22 +569,121 @@ class TimeCampSynchronizer:
             else:
                 logger.warning(f"Could not find newly created user {email} in final processing")
     
+    def _remove_empty_groups(self, dry_run: bool = False) -> None:
+        """Remove empty groups (no users) under root_group_id, bottom-up.
+
+        Recursively removes leaf groups that have no users assigned.
+        If removing a leaf makes its parent empty (no users and no remaining children),
+        the parent is removed too.
+        """
+        # Fetch current groups and users
+        all_groups = self.api.get_groups()
+        all_users = self.api.get_users(include_enabled=False)
+
+        root_group_id = str(self.config.root_group_id)
+
+        # Build set of groups under root_group_id (descendants only)
+        groups_by_id = {str(g['group_id']): g for g in all_groups}
+
+        # Build children map
+        children_map: Dict[str, List[str]] = {}
+        for g in all_groups:
+            parent_id = str(g.get('parent_id', '0'))
+            children_map.setdefault(parent_id, []).append(str(g['group_id']))
+
+        # Collect all descendant group IDs under root
+        descendants = set()
+        queue = list(children_map.get(root_group_id, []))
+        while queue:
+            gid = queue.pop()
+            descendants.add(gid)
+            queue.extend(children_map.get(gid, []))
+
+        if not descendants:
+            logger.debug("No descendant groups found under root group, nothing to clean up")
+            return
+
+        # Build set of group IDs that have at least one user
+        groups_with_users = set()
+        for user in all_users:
+            gid = str(user.get('group_id', '0'))
+            groups_with_users.add(gid)
+
+        # Remove empty groups bottom-up: process deepest groups first
+        # Calculate depth for each descendant
+        def get_depth(group_id: str) -> int:
+            depth = 0
+            current = group_id
+            while current != root_group_id and current in groups_by_id:
+                current = str(groups_by_id[current].get('parent_id', '0'))
+                depth += 1
+            return depth
+
+        descendants_with_depth = [(gid, get_depth(gid)) for gid in descendants]
+        # Sort by depth descending (deepest first)
+        descendants_with_depth.sort(key=lambda x: x[1], reverse=True)
+
+        removed_count = 0
+        removed_ids = set()
+
+        for gid, depth in descendants_with_depth:
+            # Skip if already removed (shouldn't happen, but safety check)
+            if gid in removed_ids:
+                continue
+
+            # Check if group has users
+            if gid in groups_with_users:
+                continue
+
+            # Check if group has remaining children (not yet removed)
+            remaining_children = [
+                child_id for child_id in children_map.get(gid, [])
+                if child_id not in removed_ids
+            ]
+            if remaining_children:
+                continue
+
+            # Group is empty (no users, no remaining children) — remove it
+            group_name = groups_by_id[gid]['name'] if gid in groups_by_id else gid
+            if not dry_run:
+                logger.info(f"Removing empty group: '{group_name}' (ID: {gid})")
+                try:
+                    self.api.delete_group(int(gid))
+                    removed_ids.add(gid)
+                    removed_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to remove empty group '{group_name}' (ID: {gid}): {e}")
+            else:
+                logger.info(f"[DRY RUN] Would remove empty group: '{group_name}' (ID: {gid})")
+                removed_ids.add(gid)
+                removed_count += 1
+
+        if removed_count > 0:
+            logger.info(f"{'Would remove' if dry_run else 'Removed'} {removed_count} empty group(s)")
+        else:
+            logger.info("No empty groups found to remove")
+
     def sync(self, timecamp_users: List[Dict[str, Any]], dry_run: bool = False) -> None:
         """Main synchronization method."""
         logger.info(f"Starting synchronization with {len(timecamp_users)} users")
-        
+
         # Step 1: Get required groups
         required_groups = self._get_required_groups(timecamp_users)
         logger.info(f"Found {len(required_groups)} unique group paths")
-        
+
         # Step 2: Sync groups
         logger.info("Synchronizing group structure...")
         group_structure = self._sync_groups(required_groups, dry_run)
-        
+
         # Step 3: Sync users
         logger.info("Synchronizing users...")
         self._sync_users(timecamp_users, group_structure, dry_run)
-        
+
+        # Step 4: Remove empty groups if configured
+        if self.config.remove_empty_groups:
+            logger.info("Removing empty groups...")
+            self._remove_empty_groups(dry_run)
+
         logger.info("Synchronization completed successfully")
 
 
@@ -610,7 +709,6 @@ def main():
         # Load configuration
         config = TimeCampConfig.from_env()
         logger.info("Loaded configuration")
-
         # Log all environment variables used by this script
         logger.info("=== timecamp_sync_users configuration ===")
         logger.info(f"  TIMECAMP_API_KEY = {obfuscate_secret(os.getenv('TIMECAMP_API_KEY'))}")
@@ -629,6 +727,7 @@ def main():
         logger.info(f"  TIMECAMP_DISABLED_USERS_GROUP_ID = {config.disabled_users_group_id}")
         logger.info(f"  TIMECAMP_IGNORED_USER_IDS = {config.ignored_user_ids or '(not set)'}")
         logger.info(f"  TIMECAMP_REPLACE_EMAIL_DOMAIN = {config.replace_email_domain or '(not set)'}")
+        logger.info(f"  TIMECAMP_REMOVE_EMPTY_GROUPS = {config.remove_empty_groups}")
         logger.info("==========================================")
         
         # Check if input file exists

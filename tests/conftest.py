@@ -85,6 +85,7 @@ def mock_timecamp_config():
         exclude_regex="",
         change_groups_regex="",
         prepare_transform_config="",
+        remove_empty_groups=False,
         ssl_verify=True
     )
 

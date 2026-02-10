@@ -31,6 +31,7 @@ class TimeCampConfig:
     exclude_regex: str
     change_groups_regex: str
     prepare_transform_config: str
+    remove_empty_groups: bool
     ssl_verify: bool
 
     @classmethod
@@ -75,6 +76,7 @@ class TimeCampConfig:
         exclude_regex = os.getenv('TIMECAMP_EXCLUDE_REGEX', '').strip()
         change_groups_regex = os.getenv('TIMECAMP_CHANGE_GROUPS_REGEX', '').strip()
         prepare_transform_config = os.getenv('TIMECAMP_PREPARE_TRANSFORM_CONFIG', '').strip()
+        remove_empty_groups = os.getenv('TIMECAMP_REMOVE_EMPTY_GROUPS', 'false').lower() == 'true'
         ssl_verify = os.getenv('TIMECAMP_SSL_VERIFY', 'false').lower() == 'true'
         
         # Parse ignored user IDs
@@ -110,8 +112,18 @@ class TimeCampConfig:
             exclude_regex=exclude_regex,
             change_groups_regex=change_groups_regex,
             prepare_transform_config=prepare_transform_config,
+            remove_empty_groups=remove_empty_groups,
             ssl_verify=ssl_verify
         )
+
+def obfuscate_secret(value):
+    """Obfuscate a secret value, showing only first and last 2 characters."""
+    if not value:
+        return "(not set)"
+    value = str(value)
+    if len(value) <= 4:
+        return "****"
+    return value[:2] + "*" * (len(value) - 4) + value[-2:]
 
 def clean_name(name: Optional[str]) -> str: # bug in TimeCamp API - it doesn't accept some special characters
     """Clean special characters from name."""

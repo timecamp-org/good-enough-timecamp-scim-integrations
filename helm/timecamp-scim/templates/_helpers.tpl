@@ -110,6 +110,8 @@ Common environment variables
   value: {{ .changeGroupsRegex | quote }}
 - name: TIMECAMP_PREPARE_TRANSFORM_CONFIG
   value: {{ .prepareTransformConfig | quote }}
+- name: TIMECAMP_REMOVE_EMPTY_GROUPS
+  value: {{ .removeEmptyGroups | quote }}
 - name: TIMECAMP_SSL_VERIFY
   value: {{ .sslVerify | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE

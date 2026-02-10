@@ -272,5 +272,10 @@ class TimeCampAPI:
         return response.json().get('data', [])
     
     def delete_group(self, group_id: int) -> None:
-        """Delete a group from TimeCamp."""
-        self._make_request('DELETE', f"group/{group_id}")
+        """Delete a group from TimeCamp.
+
+        Uses DELETE /group with group_id in the JSON body.
+        Note: Root groups (parent_id == 0) cannot be deleted.
+        Subgroups of deleted group have their parent_id changed to root_group_id.
+        """
+        self._make_request('DELETE', "group", json={"group_id": group_id})

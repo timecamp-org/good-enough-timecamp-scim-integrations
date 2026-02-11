@@ -104,7 +104,7 @@ class TimeCampAPI:
 
     def add_user(self, email: str, name: str, group_id: int) -> Dict[str, Any]:
         data = {"email": [email], "tt_global_admin": "0", "tt_can_create_level_1_tasks": "0", 
-                "can_view_rates": "0", "add_to_all_projects": "0", "send_email": "0", "force_change_pass": "0"}
+                "can_view_rates": "0", "add_to_all_projects": "0", "send_email": "0", "force_change_password": "0"}
         return self._make_request('POST', f"group/{group_id}/user", json=data).json()
 
     def update_user(self, user_id: int, updates: Dict[str, Any], group_id: int) -> None:

@@ -389,8 +389,9 @@ class TestTimeCampSynchronizer:
             {1001}, {}, dry_run=False
         )
         
-        # Should deactivate missing user
-        mock_timecamp_api.update_user_setting.assert_called_with(1002, 'disabled_user', '1')
+        # Should deactivate missing user and reset added_manually
+        mock_timecamp_api.update_user_setting.assert_any_call(1002, 'disabled_user', '1')
+        mock_timecamp_api.update_user_setting.assert_any_call(1002, 'added_manually', '0')
     
     def test_handle_deactivations_user_marked_inactive(self, mock_timecamp_api, mock_timecamp_config):
         """Test deactivating users marked as inactive."""
@@ -416,8 +417,9 @@ class TestTimeCampSynchronizer:
             set(), {}, dry_run=False
         )
         
-        # Should deactivate user marked as inactive
-        mock_timecamp_api.update_user_setting.assert_called_with(1001, 'disabled_user', '1')
+        # Should deactivate user marked as inactive and reset added_manually
+        mock_timecamp_api.update_user_setting.assert_any_call(1001, 'disabled_user', '1')
+        mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
     
     def test_handle_deactivations_move_to_disabled_group(self, mock_timecamp_api, mock_timecamp_config):
         """Test moving deactivated users to disabled group."""
@@ -438,11 +440,12 @@ class TestTimeCampSynchronizer:
             timecamp_users, tc_users_by_email, {},
             set(), {}, dry_run=False
         )
-        
-        # Should move to disabled group
+
+        # Should move to disabled group and reset added_manually
         mock_timecamp_api.update_user.assert_called_with(
             1001, {'groupId': 999}, '100'
         )
+        mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
 
     def test_handle_deactivations_moves_already_disabled_user(self, mock_timecamp_api, mock_timecamp_config):
         """Test moving already disabled users to disabled group regardless of added_manually."""
@@ -468,6 +471,7 @@ class TestTimeCampSynchronizer:
         mock_timecamp_api.update_user.assert_called_with(
             1001, {'groupId': 999}, '100'
         )
+        mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
 
     def test_handle_deactivations_skips_move_when_already_in_disabled_group(self, mock_timecamp_api, mock_timecamp_config):
         """Test skipping move when user is already in disabled group."""
@@ -512,10 +516,14 @@ class TestTimeCampSynchronizer:
             set(), {}, dry_run=False
         )
 
-        mock_timecamp_api.update_user_setting.assert_not_called()
         mock_timecamp_api.update_user.assert_called_with(
             1001, {'groupId': 999}, '100'
         )
+        # Should NOT set disabled_user, but SHOULD set added_manually=0
+        disabled_calls = [c for c in mock_timecamp_api.update_user_setting.call_args_list
+                         if c == call(1001, 'disabled_user', '1')]
+        assert len(disabled_calls) == 0
+        mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
     
     def test_finalize_new_users_sets_role(self, mock_timecamp_api, mock_timecamp_config):
         """Test finalizing newly created users with role."""
@@ -583,6 +591,94 @@ class TestTimeCampSynchronizer:
         # Should set external ID
         mock_timecamp_api.update_user_setting.assert_any_call(1004, 'external_id', 'ext-123')
     
+    def test_finalize_new_users_sets_added_manually_with_no_optional_settings(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that added_manually=0 is set even when no optional settings (role/email/external_id) apply."""
+        mock_timecamp_api.get_users.return_value = [
+            {
+                'user_id': '1004',
+                'email': 'plain@test.com',
+                'display_name': 'Plain User',
+                'group_id': '101',
+                'is_enabled': True
+            }
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'plain@test.com',
+                'name': 'Plain User',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        sync._finalize_new_users()
+
+        # Should set added_manually=0 even with no optional settings
+        mock_timecamp_api.update_user_setting.assert_any_call(1004, 'added_manually', '0')
+        # Should NOT have set role, additional email, or external ID
+        mock_timecamp_api.update_user.assert_not_called()
+        mock_timecamp_api.set_additional_email.assert_not_called()
+
+    def test_finalize_new_users_sets_added_manually_after_all_settings(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that added_manually=0 is set after role, additional email, and external ID."""
+        mock_timecamp_api.get_users.return_value = [
+            {
+                'user_id': '1004',
+                'email': 'full@test.com',
+                'display_name': 'Full User',
+                'group_id': '101',
+                'is_enabled': True
+            }
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'full@test.com',
+                'name': 'Full User',
+                'group_id': 101,
+                'role': 'administrator',
+                'real_email': 'real@test.com',
+                'external_id': 'ext-456'
+            }
+        ]
+
+        sync._finalize_new_users()
+
+        # Verify added_manually=0 is the last update_user_setting call
+        setting_calls = mock_timecamp_api.update_user_setting.call_args_list
+        last_call = setting_calls[-1]
+        assert last_call == call(1004, 'added_manually', '0')
+
+        # Verify added_manually=0 was set after each individual setting too
+        added_manually_calls = [c for c in setting_calls if c == call(1004, 'added_manually', '0')]
+        # One after role, one after additional email, one after external ID, one final
+        assert len(added_manually_calls) == 4
+
+    def test_handle_deactivations_dry_run_does_not_set_added_manually(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that dry run doesn't set added_manually=0 during deactivation."""
+        timecamp_users = []
+        tc_users_by_email = {
+            'missing@test.com': {
+                'user_id': '1002',
+                'email': 'missing@test.com',
+                'is_enabled': True,
+                'group_id': '100'
+            }
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._handle_deactivations(
+            timecamp_users, tc_users_by_email, {},
+            set(), {}, dry_run=True
+        )
+
+        mock_timecamp_api.update_user_setting.assert_not_called()
+
     def test_sync_integration(self, mock_timecamp_api, mock_timecamp_config, sample_timecamp_users):
         """Test the main sync method integration."""
         mock_timecamp_config.root_group_id = 100

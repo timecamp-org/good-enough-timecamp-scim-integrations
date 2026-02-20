@@ -21,7 +21,7 @@ from common.transform_config import load_transform_config, apply_transform_confi
 load_dotenv()
 
 # Version
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 
 # Initialize logger
 logger = setup_logger('prepare_timecamp_data')

@@ -458,6 +458,8 @@ class TimeCampSynchronizer:
                         self.api.update_user(
                             user_id, {'groupId': self.config.disabled_users_group_id}, tc_user.get('group_id')
                         )
+                        logger.info(f"Setting added_manually=0 for user {email} after move to disabled group")
+                        self.api.update_user_setting(user_id, 'added_manually', '0')
                     else:
                         logger.info(
                             f"[DRY RUN] Would move already disabled user {email} to disabled group (ID: {self.config.disabled_users_group_id})"
@@ -500,6 +502,8 @@ class TimeCampSynchronizer:
                         elif not dry_run:
                             logger.info(f"Moving user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
                             self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
+                            logger.info(f"Setting added_manually=0 for user {email} after move to disabled group")
+                            self.api.update_user_setting(user_id, 'added_manually', '0')
                         else:
                             logger.info(f"[DRY RUN] Would move user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
                     continue
@@ -507,7 +511,9 @@ class TimeCampSynchronizer:
                 if not dry_run:
                     logger.info(f"Deactivating user {email} ({reason})")
                     self.api.update_user_setting(user_id, 'disabled_user', '1')
-                    
+                    logger.info(f"Setting added_manually=0 for user {email} after deactivation")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
+
                     # Move to disabled users group if configured
                     if self.config.disabled_users_group_id > 0:
                         if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
@@ -545,10 +551,7 @@ class TimeCampSynchronizer:
             if tc_user:
                 user_id = int(tc_user['user_id'])
                 logger.info(f"Applying final settings to new user {email} (ID: {user_id})")
-                
-                # Set added_manually to 0
-                self.api.update_user_setting(user_id, 'added_manually', '0')
-                
+
                 # Set role if not default
                 role = new_user.get('role', 'user')
                 if role != 'user':
@@ -556,16 +559,26 @@ class TimeCampSynchronizer:
                     role_id = role_map.get(role, '3')
                     logger.info(f"Setting {role} role for new user {email}")
                     self.api.update_user(user_id, {'role_id': role_id}, new_user['group_id'])
-                
+                    logger.info(f"Setting added_manually=0 for user {email} after role update")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
+
                 # Set additional email if present
                 if new_user.get('real_email'):
                     logger.info(f"Setting additional email for new user {email}")
                     self.api.set_additional_email(user_id, new_user['real_email'])
-                
+                    logger.info(f"Setting added_manually=0 for user {email} after additional email update")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
+
                 # Set external ID if present
                 if new_user.get('external_id') and not self.config.disable_external_id_sync:
                     logger.info(f"Setting external ID for new user {email}")
                     self.api.update_user_setting(user_id, 'external_id', new_user['external_id'])
+                    logger.info(f"Setting added_manually=0 for user {email} after external ID update")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
+
+                # Always set added_manually=0 after all settings are applied
+                logger.info(f"Setting added_manually=0 for new user {email}")
+                self.api.update_user_setting(user_id, 'added_manually', '0')
             else:
                 logger.warning(f"Could not find newly created user {email} in final processing")
     

@@ -654,10 +654,9 @@ class TestTimeCampSynchronizer:
         last_call = setting_calls[-1]
         assert last_call == call(1004, 'added_manually', '0')
 
-        # Verify added_manually=0 was set after each individual setting too
+        # Verify added_manually=0 was set once (consolidated final call)
         added_manually_calls = [c for c in setting_calls if c == call(1004, 'added_manually', '0')]
-        # One after role, one after additional email, one after external ID, one final
-        assert len(added_manually_calls) == 4
+        assert len(added_manually_calls) == 1
 
     def test_handle_deactivations_dry_run_does_not_set_added_manually(self, mock_timecamp_api, mock_timecamp_config):
         """Test that dry run doesn't set added_manually=0 during deactivation."""

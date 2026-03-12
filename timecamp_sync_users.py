@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 from common.logger import setup_logger
 from common.utils import TimeCampConfig, obfuscate_secret
 from common.api import TimeCampAPI
+from common.storage import load_json_file, save_json_file, file_exists
+
+PENDING_SETTINGS_FILE = 'var/pending_user_settings.json'
 
 # Load environment variables
 load_dotenv()
@@ -38,6 +41,7 @@ class TimeCampSynchronizer:
         self.api = api
         self.config = config
         self.newly_created_users = []
+        self.pending_settings = {}
         
     def _build_group_paths(self, groups: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Build a map of full paths to group details from flat group list."""
@@ -347,24 +351,33 @@ class TimeCampSynchronizer:
         # Check if user needs to be re-enabled (using already-fetched is_enabled status)
         if not existing_user.get('is_enabled', True):
             if not dry_run:
-                logger.info(f"Re-enabling user {email}")
-                self.api.update_user_setting(user_id, 'disabled_user', '0')
-                # Always set added_manually=0 when re-enabling
-                logger.info(f"Setting added_manually=0 for user {email} after re-enabling")
-                self.api.update_user_setting(user_id, 'added_manually', '0')
+                if self.config.persistent_settings:
+                    self._queue_user_setting(user_id, email, 'disabled_user', '0')
+                    self._queue_user_setting(user_id, email, 'added_manually', '0')
+                else:
+                    logger.info(f"Re-enabling user {email}")
+                    self.api.update_user_setting(user_id, 'disabled_user', '0')
+                    logger.info(f"Setting added_manually=0 for user {email} after re-enabling")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
             else:
                 logger.info(f"[DRY RUN] Would re-enable user {email}")
                 logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after re-enabling")
+        elif self.config.persistent_settings:
+            # User is active and already enabled — clear any stale pending entry
+            self._clear_pending_for_user(user_id)
 
         # Apply updates
         if updates:
             if not dry_run:
                 logger.info(f"Updating user {email}: {', '.join(changes)}")
                 self.api.update_user(user_id, updates, existing_user['group_id'])
-                
+
                 # Always set added_manually to 0 after any update to ensure proper tracking
-                logger.info(f"Setting added_manually=0 for user {email} after update")
-                self.api.update_user_setting(user_id, 'added_manually', '0')
+                if self.config.persistent_settings:
+                    self._queue_user_setting(user_id, email, 'added_manually', '0')
+                else:
+                    logger.info(f"Setting added_manually=0 for user {email} after update")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
             else:
                 logger.info(f"[DRY RUN] Would update user {email}: {', '.join(changes)}")
                 logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after update")
@@ -376,8 +389,11 @@ class TimeCampSynchronizer:
                 if not dry_run:
                     logger.info(f"Updating additional email for user {email}")
                     self.api.set_additional_email(user_id, tc_user_data['timecamp_real_email'])
-                    logger.info(f"Setting added_manually=0 for user {email} after additional email update")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
+                    if self.config.persistent_settings:
+                        self._queue_user_setting(user_id, email, 'added_manually', '0')
+                    else:
+                        logger.info(f"Setting added_manually=0 for user {email} after additional email update")
+                        self.api.update_user_setting(user_id, 'added_manually', '0')
                 else:
                     logger.info(f"[DRY RUN] Would update additional email for user {email}")
                     logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after additional email update")
@@ -389,8 +405,11 @@ class TimeCampSynchronizer:
                 if not dry_run:
                     logger.info(f"Updating external ID for user {email}")
                     self.api.update_user_setting(user_id, 'external_id', tc_user_data['timecamp_external_id'])
-                    logger.info(f"Setting added_manually=0 for user {email} after external ID update")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
+                    if self.config.persistent_settings:
+                        self._queue_user_setting(user_id, email, 'added_manually', '0')
+                    else:
+                        logger.info(f"Setting added_manually=0 for user {email} after external ID update")
+                        self.api.update_user_setting(user_id, 'added_manually', '0')
                 else:
                     logger.info(f"[DRY RUN] Would update external ID for user {email}")
                     logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after external ID update")
@@ -445,6 +464,9 @@ class TimeCampSynchronizer:
             
             # Move already disabled users to disabled group if configured
             if not tc_user.get('is_enabled', True):
+                # Clear any stale pending entry — user is already disabled and not in active source
+                if self.config.persistent_settings:
+                    self._clear_pending_for_user(user_id)
                 if self.config.disabled_users_group_id > 0:
                     if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
                         logger.debug(
@@ -458,8 +480,11 @@ class TimeCampSynchronizer:
                         self.api.update_user(
                             user_id, {'groupId': self.config.disabled_users_group_id}, tc_user.get('group_id')
                         )
-                        logger.info(f"Setting added_manually=0 for user {email} after move to disabled group")
-                        self.api.update_user_setting(user_id, 'added_manually', '0')
+                        if self.config.persistent_settings:
+                            self._queue_user_setting(user_id, email, 'added_manually', '0')
+                        else:
+                            logger.info(f"Setting added_manually=0 for user {email} after move to disabled group")
+                            self.api.update_user_setting(user_id, 'added_manually', '0')
                     else:
                         logger.info(
                             f"[DRY RUN] Would move already disabled user {email} to disabled group (ID: {self.config.disabled_users_group_id})"
@@ -492,6 +517,9 @@ class TimeCampSynchronizer:
             
             if should_deactivate:
                 if self.config.disable_user_deactivation:
+                    # Clear any stale pending entry — deactivation is explicitly disabled
+                    if self.config.persistent_settings:
+                        self._clear_pending_for_user(user_id)
                     logger.info(f"Skipping deactivation for user {email} ({reason}) due to disable_user_deactivation config.")
                     if self.config.disabled_users_group_id > 0:
                         if str(tc_user.get('group_id')) == str(self.config.disabled_users_group_id):
@@ -502,17 +530,24 @@ class TimeCampSynchronizer:
                         elif not dry_run:
                             logger.info(f"Moving user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
                             self.api.update_user(user_id, {'groupId': self.config.disabled_users_group_id}, tc_user['group_id'])
-                            logger.info(f"Setting added_manually=0 for user {email} after move to disabled group")
-                            self.api.update_user_setting(user_id, 'added_manually', '0')
+                            if self.config.persistent_settings:
+                                self._queue_user_setting(user_id, email, 'added_manually', '0')
+                            else:
+                                logger.info(f"Setting added_manually=0 for user {email} after move to disabled group")
+                                self.api.update_user_setting(user_id, 'added_manually', '0')
                         else:
                             logger.info(f"[DRY RUN] Would move user {email} to disabled group (ID: {self.config.disabled_users_group_id}) without deactivation")
                     continue
 
                 if not dry_run:
-                    logger.info(f"Deactivating user {email} ({reason})")
-                    self.api.update_user_setting(user_id, 'disabled_user', '1')
-                    logger.info(f"Setting added_manually=0 for user {email} after deactivation")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
+                    if self.config.persistent_settings:
+                        self._queue_user_setting(user_id, email, 'disabled_user', '1')
+                        self._queue_user_setting(user_id, email, 'added_manually', '0')
+                    else:
+                        logger.info(f"Deactivating user {email} ({reason})")
+                        self.api.update_user_setting(user_id, 'disabled_user', '1')
+                        logger.info(f"Setting added_manually=0 for user {email} after deactivation")
+                        self.api.update_user_setting(user_id, 'added_manually', '0')
 
                     # Move to disabled users group if configured
                     if self.config.disabled_users_group_id > 0:
@@ -559,29 +594,98 @@ class TimeCampSynchronizer:
                     role_id = role_map.get(role, '3')
                     logger.info(f"Setting {role} role for new user {email}")
                     self.api.update_user(user_id, {'role_id': role_id}, new_user['group_id'])
-                    logger.info(f"Setting added_manually=0 for user {email} after role update")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
 
                 # Set additional email if present
                 if new_user.get('real_email'):
                     logger.info(f"Setting additional email for new user {email}")
                     self.api.set_additional_email(user_id, new_user['real_email'])
-                    logger.info(f"Setting added_manually=0 for user {email} after additional email update")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
 
                 # Set external ID if present
                 if new_user.get('external_id') and not self.config.disable_external_id_sync:
                     logger.info(f"Setting external ID for new user {email}")
                     self.api.update_user_setting(user_id, 'external_id', new_user['external_id'])
-                    logger.info(f"Setting added_manually=0 for user {email} after external ID update")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
 
                 # Always set added_manually=0 after all settings are applied
-                logger.info(f"Setting added_manually=0 for new user {email}")
-                self.api.update_user_setting(user_id, 'added_manually', '0')
+                if self.config.persistent_settings:
+                    self._queue_user_setting(user_id, email, 'added_manually', '0')
+                else:
+                    logger.info(f"Setting added_manually=0 for new user {email}")
+                    self.api.update_user_setting(user_id, 'added_manually', '0')
             else:
                 logger.warning(f"Could not find newly created user {email} in final processing")
     
+    def _load_pending_settings(self) -> Dict[str, Any]:
+        """Load pending user settings from persistent storage."""
+        try:
+            if file_exists(PENDING_SETTINGS_FILE):
+                data = load_json_file(PENDING_SETTINGS_FILE)
+                logger.info(f"Loaded {len(data)} pending user setting(s) from {PENDING_SETTINGS_FILE}")
+                return data
+        except Exception as e:
+            logger.warning(f"Failed to load pending settings file: {e}")
+        return {}
+
+    def _save_pending_settings(self) -> None:
+        """Save pending user settings to persistent storage."""
+        save_json_file(self.pending_settings, PENDING_SETTINGS_FILE)
+
+    def _queue_user_setting(self, user_id: int, email: str, name: str, value: str) -> None:
+        """Queue a user setting change for later processing."""
+        key = str(user_id)
+        if key not in self.pending_settings:
+            self.pending_settings[key] = {
+                'user_id': user_id,
+                'email': email,
+                'settings': {}
+            }
+        self.pending_settings[key]['settings'][name] = value
+        self._save_pending_settings()
+        logger.info(f"Queued {name}={value} for user {email} (ID: {user_id})")
+
+    def _clear_pending_for_user(self, user_id: int) -> None:
+        """Clear stale disabled_user entry from pending settings. Keeps other settings like added_manually."""
+        key = str(user_id)
+        if key not in self.pending_settings:
+            return
+        settings = self.pending_settings[key].get('settings', {})
+        if 'disabled_user' not in settings:
+            return
+        del settings['disabled_user']
+        if not settings:
+            del self.pending_settings[key]
+        self._save_pending_settings()
+        logger.debug(f"Cleared stale disabled_user pending setting for user (ID: {user_id})")
+
+    def _process_pending_settings(self, dry_run: bool = False) -> None:
+        """Process all pending user setting changes at end of sync."""
+        if not self.pending_settings:
+            logger.info("No pending user settings to process")
+            return
+
+        logger.info(f"Processing {len(self.pending_settings)} pending user setting(s)...")
+
+        for user_id_str in list(self.pending_settings.keys()):
+            entry = self.pending_settings[user_id_str]
+            user_id = entry['user_id']
+            email = entry['email']
+            settings = entry.get('settings', {})
+
+            if not dry_run:
+                try:
+                    for name, value in settings.items():
+                        logger.info(f"Applying pending {name}={value} for user {email} (ID: {user_id})")
+                        self.api.update_user_setting(user_id, name, value)
+
+                    # Delete from pending immediately after successful processing
+                    del self.pending_settings[user_id_str]
+                    self._save_pending_settings()
+                    logger.info(f"Successfully applied and removed pending settings for user {email} (ID: {user_id})")
+                except Exception as e:
+                    logger.error(f"Failed to apply pending settings for user {email} (ID: {user_id}): {e}")
+            else:
+                for name, value in settings.items():
+                    logger.info(f"[DRY RUN] Would apply pending {name}={value} for user {email} (ID: {user_id})")
+
     def _remove_empty_groups(self, dry_run: bool = False) -> None:
         """Remove empty groups (no users) under root_group_id, bottom-up.
 
@@ -680,6 +784,10 @@ class TimeCampSynchronizer:
         """Main synchronization method."""
         logger.info(f"Starting synchronization with {len(timecamp_users)} users")
 
+        # Load any existing pending settings from previous runs
+        if self.config.persistent_settings:
+            self.pending_settings = self._load_pending_settings()
+
         # Step 1: Get required groups
         required_groups = self._get_required_groups(timecamp_users)
         logger.info(f"Found {len(required_groups)} unique group paths")
@@ -696,6 +804,11 @@ class TimeCampSynchronizer:
         if self.config.remove_empty_groups:
             logger.info("Removing empty groups...")
             self._remove_empty_groups(dry_run)
+
+        # Step 5: Process pending disabled_user settings
+        if self.config.persistent_settings:
+            logger.info("Processing pending user settings...")
+            self._process_pending_settings(dry_run)
 
         logger.info("Synchronization completed successfully")
 
@@ -741,10 +854,10 @@ def main():
         logger.info(f"  TIMECAMP_IGNORED_USER_IDS = {config.ignored_user_ids or '(not set)'}")
         logger.info(f"  TIMECAMP_REPLACE_EMAIL_DOMAIN = {config.replace_email_domain or '(not set)'}")
         logger.info(f"  TIMECAMP_REMOVE_EMPTY_GROUPS = {config.remove_empty_groups}")
+        logger.info(f"  TIMECAMP_SYNC_PERSISTENT_SETTINGS = {config.persistent_settings}")
         logger.info("==========================================")
         
         # Check if input file exists
-        from common.storage import load_json_file, file_exists
         if not file_exists(args.input):
             logger.error(f"Input file not found: {args.input}")
             logger.error("Please run prepare_timecamp_data.py first to generate the input file")

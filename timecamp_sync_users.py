@@ -7,6 +7,7 @@ users and groups with TimeCamp API.
 
 import os
 import json
+import time
 import argparse
 from typing import Dict, List, Any, Set, Tuple, Optional
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from common.api import TimeCampAPI
 from common.storage import load_json_file, save_json_file, file_exists
 
 PENDING_SETTINGS_FILE = 'var/pending_user_settings.json'
+PENDING_NEW_USERS_FILE = 'var/pending_new_users.json'
 
 # Load environment variables
 load_dotenv()
@@ -572,48 +574,150 @@ class TimeCampSynchronizer:
                             logger.info(f"[DRY RUN] Would move deactivated user {email} to disabled group (ID: {self.config.disabled_users_group_id})")
     
     def _finalize_new_users(self) -> None:
-        """Apply final settings to newly created users."""
+        """Apply final settings to newly created users.
+
+        Retries fetching the user list if any newly created users are not found,
+        as the API may have a propagation delay after user creation.
+        If persistent_settings is enabled, unfound users are saved for the next run.
+        """
         logger.info("Finalizing newly created users...")
-        
-        # Fetch updated user list
+
+        max_retries = 3
+        retry_delay = 60  # seconds
+        remaining_users = list(self.newly_created_users)
+
+        for attempt in range(1, max_retries + 1):
+            # Fetch updated user list
+            current_tc_users = self.api.get_users()
+            tc_users_by_email = {user['email'].lower(): user for user in current_tc_users}
+
+            not_found_users = []
+
+            for new_user in remaining_users:
+                email = new_user['email'].lower()
+                tc_user = tc_users_by_email.get(email)
+
+                if tc_user:
+                    self._apply_new_user_settings(new_user, tc_user)
+                else:
+                    not_found_users.append(new_user)
+
+            if not not_found_users:
+                break
+
+            if attempt < max_retries:
+                not_found_emails = [u['email'] for u in not_found_users]
+                logger.warning(
+                    f"Could not find {len(not_found_users)} newly created user(s) "
+                    f"(attempt {attempt}/{max_retries}): {', '.join(not_found_emails)}. "
+                    f"Retrying in {retry_delay}s..."
+                )
+                time.sleep(retry_delay)
+                remaining_users = not_found_users
+            else:
+                for user in not_found_users:
+                    if self.config.persistent_settings:
+                        self._queue_pending_new_user(user)
+                        logger.warning(
+                            f"Could not find newly created user {user['email']} after "
+                            f"{max_retries} attempts — saved for next run"
+                        )
+                    else:
+                        logger.warning(
+                            f"Could not find newly created user {user['email']} in final processing "
+                            f"after {max_retries} attempts"
+                        )
+
+    def _apply_new_user_settings(self, new_user: Dict[str, Any], tc_user: Dict[str, Any]) -> None:
+        """Apply final settings to a single newly created user."""
+        email = new_user['email'].lower()
+        user_id = int(tc_user['user_id'])
+        logger.info(f"Applying final settings to new user {email} (ID: {user_id})")
+
+        # Set role if not default
+        role = new_user.get('role', 'user')
+        if role != 'user':
+            role_map = {'administrator': '1', 'supervisor': '2', 'user': '3', 'guest': '5'}
+            role_id = role_map.get(role, '3')
+            logger.info(f"Setting {role} role for new user {email}")
+            self.api.update_user(user_id, {'role_id': role_id}, new_user['group_id'])
+
+        # Set additional email if present
+        if new_user.get('real_email'):
+            logger.info(f"Setting additional email for new user {email}")
+            self.api.set_additional_email(user_id, new_user['real_email'])
+
+        # Set external ID if present
+        if new_user.get('external_id') and not self.config.disable_external_id_sync:
+            logger.info(f"Setting external ID for new user {email}")
+            self.api.update_user_setting(user_id, 'external_id', new_user['external_id'])
+
+        # Always set added_manually=0 after all settings are applied
+        if self.config.persistent_settings:
+            self._queue_user_setting(user_id, email, 'added_manually', '0')
+        else:
+            logger.info(f"Setting added_manually=0 for new user {email}")
+            self.api.update_user_setting(user_id, 'added_manually', '0')
+
+    def _load_pending_new_users(self) -> List[Dict[str, Any]]:
+        """Load pending new users from persistent storage."""
+        try:
+            if file_exists(PENDING_NEW_USERS_FILE):
+                data = load_json_file(PENDING_NEW_USERS_FILE)
+                logger.info(f"Loaded {len(data)} pending new user(s) from {PENDING_NEW_USERS_FILE}")
+                return data
+        except Exception as e:
+            logger.warning(f"Failed to load pending new users file: {e}")
+        return []
+
+    def _save_pending_new_users(self, users: List[Dict[str, Any]]) -> None:
+        """Save pending new users to persistent storage."""
+        save_json_file(users, PENDING_NEW_USERS_FILE)
+
+    def _queue_pending_new_user(self, new_user: Dict[str, Any]) -> None:
+        """Queue a new user for finalization on the next run."""
+        pending = self._load_pending_new_users()
+        # Avoid duplicates by email
+        existing_emails = {u['email'].lower() for u in pending}
+        if new_user['email'].lower() not in existing_emails:
+            pending.append(new_user)
+            self._save_pending_new_users(pending)
+            logger.info(f"Queued pending new user {new_user['email']} for next run")
+
+    def _process_pending_new_users(self, dry_run: bool = False) -> None:
+        """Process pending new users from previous runs.
+
+        Looks up each pending user by email in the current TimeCamp user list
+        and applies final settings if found.
+        """
+        pending = self._load_pending_new_users()
+        if not pending:
+            logger.info("No pending new users to process")
+            return
+
+        logger.info(f"Processing {len(pending)} pending new user(s) from previous run(s)...")
+
         current_tc_users = self.api.get_users()
         tc_users_by_email = {user['email'].lower(): user for user in current_tc_users}
-        
-        for new_user in self.newly_created_users:
+
+        still_pending = []
+
+        for new_user in pending:
             email = new_user['email'].lower()
             tc_user = tc_users_by_email.get(email)
-            
+
             if tc_user:
-                user_id = int(tc_user['user_id'])
-                logger.info(f"Applying final settings to new user {email} (ID: {user_id})")
-
-                # Set role if not default
-                role = new_user.get('role', 'user')
-                if role != 'user':
-                    role_map = {'administrator': '1', 'supervisor': '2', 'user': '3', 'guest': '5'}
-                    role_id = role_map.get(role, '3')
-                    logger.info(f"Setting {role} role for new user {email}")
-                    self.api.update_user(user_id, {'role_id': role_id}, new_user['group_id'])
-
-                # Set additional email if present
-                if new_user.get('real_email'):
-                    logger.info(f"Setting additional email for new user {email}")
-                    self.api.set_additional_email(user_id, new_user['real_email'])
-
-                # Set external ID if present
-                if new_user.get('external_id') and not self.config.disable_external_id_sync:
-                    logger.info(f"Setting external ID for new user {email}")
-                    self.api.update_user_setting(user_id, 'external_id', new_user['external_id'])
-
-                # Always set added_manually=0 after all settings are applied
-                if self.config.persistent_settings:
-                    self._queue_user_setting(user_id, email, 'added_manually', '0')
+                if not dry_run:
+                    self._apply_new_user_settings(new_user, tc_user)
+                    logger.info(f"Successfully applied pending settings for user {email}")
                 else:
-                    logger.info(f"Setting added_manually=0 for new user {email}")
-                    self.api.update_user_setting(user_id, 'added_manually', '0')
+                    logger.info(f"[DRY RUN] Would apply pending settings for user {email}")
             else:
-                logger.warning(f"Could not find newly created user {email} in final processing")
-    
+                logger.warning(f"Pending new user {email} still not found in TimeCamp — keeping for next run")
+                still_pending.append(new_user)
+
+        self._save_pending_new_users(still_pending)
+
     def _load_pending_settings(self) -> Dict[str, Any]:
         """Load pending user settings from persistent storage."""
         try:
@@ -805,7 +909,12 @@ class TimeCampSynchronizer:
             logger.info("Removing empty groups...")
             self._remove_empty_groups(dry_run)
 
-        # Step 5: Process pending disabled_user settings
+        # Step 5: Process pending new users from previous runs
+        if self.config.persistent_settings:
+            logger.info("Processing pending new users...")
+            self._process_pending_new_users(dry_run)
+
+        # Step 6: Process pending disabled_user settings
         if self.config.persistent_settings:
             logger.info("Processing pending user settings...")
             self._process_pending_settings(dry_run)

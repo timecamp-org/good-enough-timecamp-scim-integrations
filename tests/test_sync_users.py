@@ -654,10 +654,253 @@ class TestTimeCampSynchronizer:
         last_call = setting_calls[-1]
         assert last_call == call(1004, 'added_manually', '0')
 
-        # Verify added_manually=0 was set after each individual setting too
+        # Verify added_manually=0 was set once (consolidated final call)
         added_manually_calls = [c for c in setting_calls if c == call(1004, 'added_manually', '0')]
-        # One after role, one after additional email, one after external ID, one final
-        assert len(added_manually_calls) == 4
+        assert len(added_manually_calls) == 1
+
+    @patch('timecamp_sync_users.time.sleep')
+    def test_finalize_new_users_retries_on_not_found(self, mock_sleep, mock_timecamp_api, mock_timecamp_config):
+        """Test that finalization retries when a newly created user is not found."""
+        # First call: user not found. Second call: user found.
+        mock_timecamp_api.get_users.side_effect = [
+            [],  # attempt 1: empty
+            [    # attempt 2: user appears
+                {
+                    'user_id': '1004',
+                    'email': 'delayed@test.com',
+                    'display_name': 'Delayed User',
+                    'group_id': '101',
+                    'is_enabled': True
+                }
+            ]
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'delayed@test.com',
+                'name': 'Delayed User',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        sync._finalize_new_users()
+
+        # Should have fetched users twice
+        assert mock_timecamp_api.get_users.call_count == 2
+        # Should have slept between retries
+        mock_sleep.assert_called_once_with(60)
+        # Should have applied settings after finding the user
+        mock_timecamp_api.update_user_setting.assert_any_call(1004, 'added_manually', '0')
+
+    @patch('timecamp_sync_users.time.sleep')
+    def test_finalize_new_users_gives_up_after_max_retries(self, mock_sleep, mock_timecamp_api, mock_timecamp_config):
+        """Test that finalization gives up after max retries for unfound users."""
+        # User never appears in any attempt
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'ghost@test.com',
+                'name': 'Ghost User',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        sync._finalize_new_users()
+
+        # Should have fetched users 3 times (max_retries)
+        assert mock_timecamp_api.get_users.call_count == 3
+        # Should have slept twice (between attempt 1->2 and 2->3)
+        assert mock_sleep.call_count == 2
+        # Should NOT have applied any settings
+        mock_timecamp_api.update_user_setting.assert_not_called()
+
+    @patch('timecamp_sync_users.time.sleep')
+    def test_finalize_new_users_partial_retry(self, mock_sleep, mock_timecamp_api, mock_timecamp_config):
+        """Test that only missing users are retried, found users are processed immediately."""
+        mock_timecamp_api.get_users.side_effect = [
+            [   # attempt 1: only user_a found
+                {
+                    'user_id': '1001',
+                    'email': 'user_a@test.com',
+                    'display_name': 'User A',
+                    'group_id': '101',
+                    'is_enabled': True
+                }
+            ],
+            [   # attempt 2: user_b now found too
+                {
+                    'user_id': '1001',
+                    'email': 'user_a@test.com',
+                    'display_name': 'User A',
+                    'group_id': '101',
+                    'is_enabled': True
+                },
+                {
+                    'user_id': '1002',
+                    'email': 'user_b@test.com',
+                    'display_name': 'User B',
+                    'group_id': '101',
+                    'is_enabled': True
+                }
+            ]
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'user_a@test.com',
+                'name': 'User A',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            },
+            {
+                'email': 'user_b@test.com',
+                'name': 'User B',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        sync._finalize_new_users()
+
+        # Both users should have added_manually=0 set
+        mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
+        mock_timecamp_api.update_user_setting.assert_any_call(1002, 'added_manually', '0')
+        # Should have retried once
+        assert mock_timecamp_api.get_users.call_count == 2
+        mock_sleep.assert_called_once_with(60)
+
+    @patch('timecamp_sync_users.time.sleep')
+    def test_finalize_new_users_persists_unfound_when_persistent_settings(self, mock_sleep, mock_timecamp_api, mock_timecamp_config):
+        """Test that unfound users are saved for next run when persistent_settings is enabled."""
+        mock_timecamp_config.persistent_settings = True
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'ghost@test.com',
+                'name': 'Ghost User',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        with patch('timecamp_sync_users.file_exists', return_value=False), \
+             patch('timecamp_sync_users.save_json_file') as mock_save:
+            sync._finalize_new_users()
+
+            # Should persist the unfound user
+            mock_save.assert_called_once()
+            saved_data = mock_save.call_args[0][0]
+            assert len(saved_data) == 1
+            assert saved_data[0]['email'] == 'ghost@test.com'
+
+    @patch('timecamp_sync_users.time.sleep')
+    def test_finalize_new_users_does_not_persist_when_persistent_settings_off(self, mock_sleep, mock_timecamp_api, mock_timecamp_config):
+        """Test that unfound users are NOT saved when persistent_settings is disabled."""
+        mock_timecamp_config.persistent_settings = False
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'ghost@test.com',
+                'name': 'Ghost User',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        with patch('timecamp_sync_users.save_json_file') as mock_save:
+            sync._finalize_new_users()
+            mock_save.assert_not_called()
+
+    def test_process_pending_new_users_applies_settings(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that pending new users from previous runs get their settings applied."""
+        mock_timecamp_config.persistent_settings = True
+        pending_users = [
+            {
+                'email': 'pending@test.com',
+                'name': 'Pending User',
+                'group_id': 101,
+                'role': 'supervisor',
+                'real_email': 'real@test.com',
+                'external_id': 'ext-789'
+            }
+        ]
+
+        mock_timecamp_api.get_users.return_value = [
+            {
+                'user_id': '2001',
+                'email': 'pending@test.com',
+                'display_name': 'Pending User',
+                'group_id': '101',
+                'is_enabled': True
+            }
+        ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+
+        with patch('timecamp_sync_users.file_exists', return_value=True), \
+             patch('timecamp_sync_users.load_json_file', return_value=pending_users), \
+             patch('timecamp_sync_users.save_json_file') as mock_save:
+            sync._process_pending_new_users()
+
+            # Should apply settings
+            mock_timecamp_api.set_additional_email.assert_called_with(2001, 'real@test.com')
+            mock_timecamp_api.update_user_setting.assert_any_call(2001, 'external_id', 'ext-789')
+            # Should save empty list (user was processed)
+            mock_save.assert_called()
+            saved_data = mock_save.call_args[0][0]
+            assert len(saved_data) == 0
+
+    def test_process_pending_new_users_keeps_still_missing(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that pending users still not found are kept for the next run."""
+        mock_timecamp_config.persistent_settings = True
+        pending_users = [
+            {
+                'email': 'still_missing@test.com',
+                'name': 'Still Missing',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': None,
+                'external_id': None
+            }
+        ]
+
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+
+        with patch('timecamp_sync_users.file_exists', return_value=True), \
+             patch('timecamp_sync_users.load_json_file', return_value=pending_users), \
+             patch('timecamp_sync_users.save_json_file') as mock_save:
+            sync._process_pending_new_users()
+
+            # Should NOT apply any settings
+            mock_timecamp_api.update_user_setting.assert_not_called()
+            # Should save user back to pending
+            saved_data = mock_save.call_args[0][0]
+            assert len(saved_data) == 1
+            assert saved_data[0]['email'] == 'still_missing@test.com'
 
     def test_handle_deactivations_dry_run_does_not_set_added_manually(self, mock_timecamp_api, mock_timecamp_config):
         """Test that dry run doesn't set added_manually=0 during deactivation."""

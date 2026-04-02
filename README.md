@@ -16,19 +16,19 @@ Supported sources:
 cp .env.sample .env
 
 # 2. Fetch employees from your source system (pick one)
-uv run fetch_ldap.py
+uv run --python 3.14 --with-requirements requirements.txt fetch_ldap.py
 # uv run fetch_azuread.py
 # uv run fetch_bamboohr.py
 # uv run fetch_factorialhr.py
 
 # 3. Transform to the TimeCamp format
-uv run prepare_timecamp_json_from_fetch.py
-uv run scripts/display_timecamp_tree.py > var/structure.txt # Optional preview
-uv run scripts/display_timecamp_tree.py --html var/structure.html # Optional HTML
+uv run --python 3.14 --with-requirements requirements.txt prepare_timecamp_json_from_fetch.py
+uv run --python 3.14 --with-requirements requirements.txt scripts/display_timecamp_tree.py > var/structure.txt # Optional preview
+uv run --python 3.14 --with-requirements requirements.txt scripts/display_timecamp_tree.py --html var/structure.html # Optional HTML
 
 # 4. Sync to TimeCamp
-uv run timecamp_sync_users.py
-uv run timecamp_sync_users.py --dry-run # Simulate without making changes
+uv run --python 3.14 --with-requirements requirements.txt timecamp_sync_users.py
+uv run --python 3.14 --with-requirements requirements.txt timecamp_sync_users.py --dry-run # Simulate without making changes
 ```
 
 > **⚠️ BILLING WARNING** AUTOMATIC SEAT UPGRADES: If your TimeCamp account doesn't have enough paid seats for all users being synced, additional seats will be automatically added and charged to your account. Review your user count before proceeding to avoid unexpected billing charges.
@@ -59,6 +59,12 @@ flowchart LR
 - **[docs/docker.md](docs/docker.md)** - Docker and compose usage
 - **[docs/crontab.md](docs/crontab.md)** - Cron setup for scheduled runs
 - **[docs/tests.md](docs/tests.md)** - Comprehensive testing guide with instructions
+
+## FAQ
+
+### How to get TIMECAMP_ROOT_GROUP_ID?
+
+The easiest way is to open Users tab (https://app.timecamp.com/app#/settings/users), then click `Cog` icon near first/root group name to open group settings, then copy id from url.
 
 ## License
 

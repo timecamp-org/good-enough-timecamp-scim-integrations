@@ -314,6 +314,33 @@ class TestAssignDepartmentsSupervisor:
         assert source_data['users'][0]['role_id'] == '2'  # Supervisor
         assert source_data['users'][1]['role_id'] == '3'  # User
 
+    def test_assign_supervisor_mode_preserves_explicit_supervisor_role(self, mock_timecamp_config):
+        """Test that explicit supervisor role from source data is not downgraded."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'ic-1',
+                    'name': 'Individual Contributor',
+                    'supervisor_id': '',
+                    'department': '',
+                    'job_title': '',
+                    'role_id': '2',
+                }
+            ]
+        }
+
+        users_by_id = {
+            'ic-1': source_data['users'][0],
+        }
+        supervisor_ids = set()
+        supervisor_paths = {}
+
+        assign_departments_supervisor(
+            source_data, users_by_id, supervisor_ids, supervisor_paths, mock_timecamp_config
+        )
+
+        assert source_data['users'][0]['role_id'] == '2'
+
 
 class TestAssignDepartmentsStandard:
     """Tests for standard department assignment."""
@@ -411,6 +438,33 @@ class TestAssignDepartmentsHybrid:
         # Employee gets department + supervisor name
         assert 'Engineering' in source_data['users'][1]['department']
         assert 'Manager' in source_data['users'][1]['department']
+
+    def test_assign_hybrid_preserves_explicit_supervisor_role(self, mock_timecamp_config):
+        """Test that hybrid mode preserves explicit supervisor role from source data."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'ic-1',
+                    'name': 'Individual Contributor',
+                    'department': 'Engineering',
+                    'job_title': 'Developer',
+                    'supervisor_id': '',
+                    'role_id': '2',
+                }
+            ]
+        }
+
+        users_by_id = {
+            'ic-1': source_data['users'][0],
+        }
+        supervisor_ids = set()
+        supervisor_paths = {}
+
+        assign_departments_hybrid(
+            source_data, users_by_id, supervisor_ids, supervisor_paths, mock_timecamp_config
+        )
+
+        assert source_data['users'][0]['role_id'] == '2'
 
 
 class TestProcessSourceData:

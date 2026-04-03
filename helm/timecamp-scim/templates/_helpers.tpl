@@ -146,6 +146,8 @@ Common environment variables
   value: {{ .scimEndpoint | quote }}
 - name: AZURE_FILTER_GROUPS
   value: {{ .filterGroups | quote }}
+- name: AZURE_SUPERVISOR_GROUPS
+  value: {{ .supervisorGroups | quote }}
 - name: AZURE_PREFER_REAL_EMAIL
   value: {{ .preferRealEmail | quote }}
 - name: AZURE_TOKEN_EXPIRES_AT

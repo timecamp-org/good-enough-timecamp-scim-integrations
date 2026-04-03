@@ -330,6 +330,32 @@ def find_group_id_by_name(bearer_token, group_name, headers, make_api_request):
     logger.warning(f"No group found with name: {group_name}")
     return None
 
+
+def collect_group_member_ids(group_names, group_purpose, bearer_token, headers, make_api_request):
+    """Collect unique user IDs from Azure AD groups identified by display name."""
+    if not group_names:
+        return set()
+
+    member_ids = set()
+    logger.info(f"Resolving {group_purpose} groups: {group_names}")
+
+    for group_name in group_names:
+        normalized_name = group_name.strip()
+        if not normalized_name:
+            continue
+
+        group_id = find_group_id_by_name(bearer_token, normalized_name, headers, make_api_request)
+        if not group_id:
+            continue
+
+        group_member_ids = fetch_group_members(bearer_token, group_id, headers, make_api_request)
+        member_ids.update(group_member_ids)
+
+    if not member_ids:
+        logger.warning(f"No users found in the specified {group_purpose} groups.")
+
+    return member_ids
+
 def fetch_azure_users():
     """Fetch users from Azure AD via Microsoft Graph API and save them to JSON file."""
     try:
@@ -344,6 +370,8 @@ def fetch_azure_users():
         # Get filter groups setting
         filter_groups_str = os.getenv('AZURE_FILTER_GROUPS', '')
         filter_groups = [g.strip() for g in filter_groups_str.split(',')] if filter_groups_str else []
+        supervisor_groups_str = os.getenv('AZURE_SUPERVISOR_GROUPS', '')
+        supervisor_groups = [g.strip() for g in supervisor_groups_str.split(',')] if supervisor_groups_str else []
         
         if not graph_endpoint:
             raise ValueError("Missing required environment variable: AZURE_SCIM_ENDPOINT")
@@ -380,20 +408,22 @@ def fetch_azure_users():
                     raise
         
         # If filter groups are specified, get the list of users in those groups
-        filtered_user_ids = set()
-        if filter_groups:
-            logger.info(f"Filtering users by groups: {filter_groups}")
-            for group_name in filter_groups:
-                if not group_name.strip():
-                    continue
-                    
-                group_id = find_group_id_by_name(bearer_token, group_name.strip(), headers, make_api_request)
-                if group_id:
-                    group_member_ids = fetch_group_members(bearer_token, group_id, headers, make_api_request)
-                    filtered_user_ids.update(group_member_ids)
-            
-            if not filtered_user_ids:
-                logger.warning("No users found in the specified groups. Will return empty user list.")
+        filtered_user_ids = collect_group_member_ids(
+            filter_groups,
+            "filter",
+            bearer_token,
+            headers,
+            make_api_request,
+        )
+
+        # Users belonging to these groups get the supervisor role in TimeCamp.
+        supervisor_user_ids = collect_group_member_ids(
+            supervisor_groups,
+            "supervisor",
+            bearer_token,
+            headers,
+            make_api_request,
+        )
         
         # Fetch Users
         logger.info("Fetching users from Azure AD...")
@@ -427,6 +457,8 @@ def fetch_azure_users():
                     continue
                 
                 transformed_user = transform_azure_user_to_schema(user, prefer_real_email)
+                if user_id in supervisor_user_ids:
+                    transformed_user['role_id'] = '2'
                 users.append(transformed_user)
             
             # Check if there are more pages

@@ -180,6 +180,7 @@ config:
     clientId: ""
     scimEndpoint: "https://graph.microsoft.com/v1.0"
     filterGroups: ""  # Comma-separated list of groups
+    supervisorGroups: ""  # Comma-separated list of groups whose members become TimeCamp supervisors
     preferRealEmail: false
     tokenExpiresAt: ""
     refreshTokenExpiresAt: ""

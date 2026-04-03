@@ -10,6 +10,7 @@ from fetch_azuread import (
     AzureTokenManager,
     fetch_group_members,
     find_group_id_by_name,
+    collect_group_member_ids,
 )
 
 
@@ -356,6 +357,28 @@ class TestFindGroupIdByName:
         mock_api_request.assert_called_once()
 
 
+class TestCollectGroupMemberIds:
+    """Tests for collecting members across multiple Azure groups."""
+
+    def test_collect_group_member_ids_combines_multiple_groups(self):
+        """Test collecting unique user IDs from multiple groups."""
+        mock_api_request = Mock()
+
+        with patch('fetch_azuread.find_group_id_by_name', side_effect=['group-1', 'group-2']) as mock_find_group:
+            with patch('fetch_azuread.fetch_group_members', side_effect=[['user-1', 'user-2'], ['user-2', 'user-3']]) as mock_fetch_members:
+                result = collect_group_member_ids(
+                    ['Managers', 'Team Leads'],
+                    'supervisor',
+                    'mock_token',
+                    {'Authorization': 'Bearer mock_token'},
+                    mock_api_request,
+                )
+
+        assert result == {'user-1', 'user-2', 'user-3'}
+        assert mock_find_group.call_count == 2
+        assert mock_fetch_members.call_count == 2
+
+
 class TestFetchAzureUsersIntegration:
     """Integration tests for the full fetch_azure_users function."""
     
@@ -401,4 +424,82 @@ class TestFetchAzureUsersIntegration:
         assert len(saved_data['users']) == 1
         assert saved_data['users'][0]['external_id'] == 'user-1'
         assert saved_data['users'][0]['name'] == 'Test User'
+
+    @patch('fetch_azuread.update_azure_token')
+    @patch('fetch_azuread.load_dotenv')
+    @patch('fetch_azuread.requests.get')
+    @patch('common.storage.save_json_file')
+    def test_fetch_azure_users_marks_supervisor_group_members(
+        self,
+        mock_save,
+        mock_get,
+        mock_load_dotenv,
+        mock_update_token,
+        monkeypatch,
+    ):
+        """Test that configured Azure supervisor groups set TimeCamp supervisor role."""
+        monkeypatch.setenv('AZURE_SCIM_ENDPOINT', 'https://graph.microsoft.com/v1.0/users')
+        monkeypatch.setenv('AZURE_PREFER_REAL_EMAIL', 'false')
+        monkeypatch.setenv('AZURE_FILTER_GROUPS', '')
+        monkeypatch.setenv('AZURE_SUPERVISOR_GROUPS', 'Managers')
+
+        mock_update_token.return_value = 'mock_token'
+
+        responses = [
+            {
+                'value': [
+                    {
+                        'id': 'group-123',
+                        'displayName': 'Managers',
+                    }
+                ]
+            },
+            {
+                'value': [
+                    {'id': 'user-1', '@odata.type': '#microsoft.graph.user'},
+                ],
+                '@odata.nextLink': None,
+            },
+            {
+                'value': [
+                    {
+                        'id': 'user-1',
+                        'displayName': 'Manager User',
+                        'mail': 'manager@example.com',
+                        'userPrincipalName': 'manager@example.onmicrosoft.com',
+                        'department': 'IT',
+                        'jobTitle': 'Manager',
+                        'manager': None,
+                    },
+                    {
+                        'id': 'user-2',
+                        'displayName': 'Regular User',
+                        'mail': 'regular@example.com',
+                        'userPrincipalName': 'regular@example.onmicrosoft.com',
+                        'department': 'IT',
+                        'jobTitle': 'Developer',
+                        'manager': None,
+                    },
+                ],
+                '@odata.nextLink': None,
+            },
+        ]
+
+        def make_response(payload):
+            response = Mock()
+            response.status_code = 200
+            response.json.return_value = payload
+            return response
+
+        mock_get.side_effect = [make_response(payload) for payload in responses]
+
+        from fetch_azuread import fetch_azure_users
+        fetch_azure_users()
+
+        mock_save.assert_called_once()
+        saved_data = mock_save.call_args[0][0]
+        saved_users = {user['external_id']: user for user in saved_data['users']}
+
+        assert saved_users['user-1']['role_id'] == '2'
+        assert 'role_id' not in saved_users['user-2']
 

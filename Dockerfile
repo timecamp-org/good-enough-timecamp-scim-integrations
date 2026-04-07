@@ -20,11 +20,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create var directory for outputs
-RUN mkdir -p var/logs
+# Create non-root user and set ownership
+RUN groupadd -g 1000 appuser \
+    && useradd -u 1000 -g appuser -s /bin/sh -M appuser \
+    && mkdir -p var/logs \
+    && chown -R appuser:appuser /app
 
 # Set environment variable to ensure Python output is not buffered
 ENV PYTHONUNBUFFERED=1
 
+# Run as non-root user
+USER appuser
+
 # Default command
-CMD ["python", "--help"] 
+CMD ["python", "--help"]

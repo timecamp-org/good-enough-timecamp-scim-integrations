@@ -195,6 +195,35 @@ def test_fetch_hibob_users_basic(mock_save, mock_post, mock_env):
 
 @patch('fetch_hibob.requests.post')
 @patch('common.storage.save_json_file')
+def test_fetch_hibob_users_skips_unsupported_exclude_filter(mock_save, mock_post, mock_env, monkeypatch):
+    """Test that unsupported HiBob filter operators are ignored."""
+    monkeypatch.setenv(
+        'HIBOB_EXCLUDE_FILTER',
+        '{"fieldPath":"root.id","operator":"notEquals","values":["excluded_id"]}'
+    )
+
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = Mock()
+    mock_resp.json.return_value = {
+        "employees": [
+            make_hibob_employee("1", "John", "Doe", "john@example.com"),
+        ]
+    }
+    mock_post.return_value = mock_resp
+
+    fetch_hibob_users()
+
+    request_payload = mock_post.call_args.kwargs["json"]
+    assert "filters" not in request_payload
+
+    saved_data = mock_save.call_args[0][0]
+    assert len(saved_data["users"]) == 1
+    assert saved_data["users"][0]["external_id"] == "1"
+
+
+@patch('fetch_hibob.requests.post')
+@patch('common.storage.save_json_file')
 def test_fetch_hibob_users_excludes_no_email(mock_save, mock_post, mock_env):
     """Test that employees without email are excluded."""
     mock_resp = Mock()

@@ -187,6 +187,41 @@ def fetch_missing_supervisors(headers, users, excluded_departments, fields, supe
     return inactive_supervisors
 
 
+def parse_exclude_filter(exclude_filter_str):
+    """Parse and validate HiBob people/search filters from environment."""
+    if not exclude_filter_str:
+        return None
+
+    try:
+        exclude_filter = json.loads(exclude_filter_str)
+    except json.JSONDecodeError:
+        logger.warning("Invalid HIBOB_EXCLUDE_FILTER format, filter will be skipped")
+        return None
+
+    if not isinstance(exclude_filter, dict):
+        logger.warning("HIBOB_EXCLUDE_FILTER must be a JSON object, filter will be skipped")
+        return None
+
+    if exclude_filter.get("operator") != "equals":
+        logger.warning(
+            "Skipping HIBOB_EXCLUDE_FILTER with unsupported operator '%s'; "
+            "HiBob people/search only supports 'equals'",
+            exclude_filter.get("operator"),
+        )
+        return None
+
+    if not exclude_filter.get("fieldPath"):
+        logger.warning("HIBOB_EXCLUDE_FILTER is missing fieldPath, filter will be skipped")
+        return None
+
+    values = exclude_filter.get("values")
+    if not isinstance(values, list) or not values:
+        logger.warning("HIBOB_EXCLUDE_FILTER must contain a non-empty values list, filter will be skipped")
+        return None
+
+    return exclude_filter
+
+
 def fetch_hibob_users(debug=False):
     """Fetch active users from HiBob and save them to a JSON file."""
     global logger
@@ -208,12 +243,7 @@ def fetch_hibob_users(debug=False):
 
         # Get exclude filter configuration
         exclude_filter_str = os.getenv('HIBOB_EXCLUDE_FILTER')
-        exclude_filter = None
-        if exclude_filter_str:
-            try:
-                exclude_filter = json.loads(exclude_filter_str)
-            except json.JSONDecodeError:
-                logger.warning("Invalid HIBOB_EXCLUDE_FILTER format, filter will be skipped")
+        exclude_filter = parse_exclude_filter(exclude_filter_str)
 
         # Get excluded departments
         excluded_departments_str = os.getenv('HIBOB_EXCLUDED_DEPARTMENTS', '')

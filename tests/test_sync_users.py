@@ -420,6 +420,43 @@ class TestTimeCampSynchronizer:
         # Should deactivate user marked as inactive and reset added_manually
         mock_timecamp_api.update_user_setting.assert_any_call(1001, 'disabled_user', '1')
         mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
+
+    def test_handle_deactivations_manual_user_log_includes_reason(self, caplog, mock_timecamp_api, mock_timecamp_config):
+        """Test manual-user deactivation skip logs the deactivation trigger."""
+        mock_timecamp_config.disable_manual_user_updates = True
+        timecamp_users = [
+            {
+                'timecamp_email': 'active@test.com',
+                'timecamp_status': 'active'
+            }
+        ]
+
+        tc_users_by_email = {
+            'active@test.com': {
+                'user_id': '1001',
+                'email': 'active@test.com',
+                'is_enabled': True
+            },
+            'manual@test.com': {
+                'user_id': '1002',
+                'email': 'manual@test.com',
+                'is_enabled': True,
+                'group_id': '100'
+            }
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        with caplog.at_level('INFO', logger='timecamp_sync_v2'):
+            sync._handle_deactivations(
+                timecamp_users, tc_users_by_email, {},
+                {1001}, {1002: True}, dry_run=False
+            )
+
+        log_text = caplog.text
+        assert "Skipping deactivation for manually added user: manual@test.com" in log_text
+        assert "reason: not present in source by primary or additional email" in log_text
+        assert "additional_email='(none)'" in log_text
+        mock_timecamp_api.update_user_setting.assert_not_called()
     
     def test_handle_deactivations_move_to_disabled_group(self, mock_timecamp_api, mock_timecamp_config):
         """Test moving deactivated users to disabled group."""

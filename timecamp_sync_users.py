@@ -493,11 +493,6 @@ class TimeCampSynchronizer:
                         )
                 continue
             
-            # Skip manually added users if configured
-            if self.config.disable_manual_user_updates and manually_added.get(user_id, False):
-                logger.info(f"Skipping deactivation for manually added user: {email} (ID: {user_id}) due to disable_manual_user_updates config.")
-                continue
-            
             # Skip if already processed (matched by additional email)
             if user_id in processed_user_ids:
                 continue
@@ -508,16 +503,34 @@ class TimeCampSynchronizer:
             
             if email in inactive_users:
                 # User is marked as inactive in prepared data
+                inactive_user = inactive_users[email]
                 should_deactivate = True
-                reason = "marked as inactive"
+                reason = (
+                    "marked as inactive in source "
+                    f"(timecamp_status={inactive_user.get('timecamp_status')!r})"
+                )
             elif email not in prepared_emails:
                 # Check if user has additional email that matches
                 add_email = additional_emails.get(user_id)
-                if not add_email or add_email.lower() not in prepared_emails:
+                add_email_found = bool(add_email and add_email.lower() in prepared_emails)
+                if not add_email_found:
                     should_deactivate = True
-                    reason = "not present in source"
+                    reason = (
+                        "not present in source by primary or additional email "
+                        f"(primary_email_found=False, additional_email={add_email or '(none)'!r}, "
+                        f"additional_email_found={add_email_found})"
+                    )
             
             if should_deactivate:
+                # Skip manually added users if configured, but log the actual deactivation trigger.
+                if self.config.disable_manual_user_updates and manually_added.get(user_id, False):
+                    logger.info(
+                        f"Skipping deactivation for manually added user: {email} "
+                        f"(ID: {user_id}; reason: {reason}) "
+                        "due to disable_manual_user_updates config."
+                    )
+                    continue
+
                 if self.config.disable_user_deactivation:
                     # Clear any stale pending entry — deactivation is explicitly disabled
                     if self.config.persistent_settings:

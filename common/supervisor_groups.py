@@ -3,6 +3,14 @@ from typing import Dict, List, Any, Set, Tuple, Optional
 
 logger = logging.getLogger('timecamp_sync')
 
+
+def preserve_explicit_role_id(user: Dict[str, Any], inferred_role_id: str) -> str:
+    """Keep explicit source roles while still inferring supervisors from hierarchy."""
+    explicit_role_id = str(user.get('role_id', '')).strip()
+    if explicit_role_id in {'1', '2', '5'}:
+        return explicit_role_id
+    return inferred_role_id
+
 def prepare_user_data(user_data: Dict[str, Any], show_external_id: bool, use_job_title_name: bool = False) -> Dict[str, Any]:
     """Clean and prepare user data for processing."""
     from common.utils import clean_name
@@ -141,11 +149,9 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
         is_a_supervisor = user_id in supervisor_ids
         has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
         
-        # Set role_id based on having subordinates (2 = Supervisor, 3 = User)
-        if user_id in users_with_subordinates:
-            user['role_id'] = '2'  # Supervisor role
-        else:
-            user['role_id'] = '3'  # Regular user role
+        # Preserve explicit source roles, otherwise infer from hierarchy.
+        inferred_role_id = '2' if user_id in users_with_subordinates else '3'
+        user['role_id'] = preserve_explicit_role_id(user, inferred_role_id)
         
         # Keep isManager flag for backward compatibility
         user['isManager'] = user_id in users_with_subordinates
@@ -282,11 +288,9 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
         is_a_supervisor = user_id in supervisor_ids
         has_supervisor = user.get('supervisor_id') and user['supervisor_id'].strip()
         
-        # Set role_id based on having subordinates (2 = Supervisor, 3 = User)
-        if user_id in users_with_subordinates:
-            user['role_id'] = '2'  # Supervisor role
-        else:
-            user['role_id'] = '3'  # Regular user role
+        # Preserve explicit source roles, otherwise infer from hierarchy.
+        inferred_role_id = '2' if user_id in users_with_subordinates else '3'
+        user['role_id'] = preserve_explicit_role_id(user, inferred_role_id)
         
         # Keep isManager flag for backward compatibility
         user['isManager'] = user_id in users_with_subordinates

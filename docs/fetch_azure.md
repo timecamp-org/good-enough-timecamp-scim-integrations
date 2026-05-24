@@ -38,3 +38,12 @@ AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
    - To use real email addresses (mail attribute) when available, add this to your `.env`:
 ```bash
 AZURE_PREFER_REAL_EMAIL=true
+```
+
+6. (Optional) Grant TimeCamp supervisor role from Azure groups:
+   - Create one or more Azure AD / Entra ID groups for supervisors, for example `TimeCamp Supervisors`
+   - Add the desired users to those groups
+   - Configure them in `.env` as a comma-separated list:
+```bash
+AZURE_SUPERVISOR_GROUPS=TimeCamp Supervisors,Team Leads
+```

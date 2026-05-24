@@ -33,6 +33,7 @@ class TimeCampConfig:
     prepare_transform_config: str
     remove_empty_groups: bool
     ssl_verify: bool
+    persistent_settings: bool
 
     @classmethod
     def from_env(cls, validate_auth: bool = True) -> 'TimeCampConfig':
@@ -78,6 +79,7 @@ class TimeCampConfig:
         prepare_transform_config = os.getenv('TIMECAMP_PREPARE_TRANSFORM_CONFIG', '').strip()
         remove_empty_groups = os.getenv('TIMECAMP_REMOVE_EMPTY_GROUPS', 'false').lower() == 'true'
         ssl_verify = os.getenv('TIMECAMP_SSL_VERIFY', 'false').lower() == 'true'
+        persistent_settings = os.getenv('TIMECAMP_SYNC_PERSISTENT_SETTINGS', 'false').lower() == 'true'
         
         # Parse ignored user IDs
         ignored_user_ids = {
@@ -113,7 +115,8 @@ class TimeCampConfig:
             change_groups_regex=change_groups_regex,
             prepare_transform_config=prepare_transform_config,
             remove_empty_groups=remove_empty_groups,
-            ssl_verify=ssl_verify
+            ssl_verify=ssl_verify,
+            persistent_settings=persistent_settings
         )
 
 def obfuscate_secret(value):

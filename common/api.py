@@ -160,7 +160,7 @@ class TimeCampAPI:
                 "1234": [{"group_id": "5678", "role_id": "2"}]
             }
         """
-        response = self._make_request('GET', "people_picker")
+        response = self._make_request('GET', "people_picker", params={"context": "admin"})
         data = response.json()
         
         user_roles = {}

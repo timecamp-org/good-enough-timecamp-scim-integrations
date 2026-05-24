@@ -51,6 +51,7 @@ config:
     tenantId: "your-tenant-id"
     clientId: "your-client-id"
     filterGroups: "Group1,Group2"  # Groups to include
+    supervisorGroups: "Managers,Team Leads"  # Optional: members get TimeCamp supervisor role
   
   ldap:
     host: "ldap.company.local"

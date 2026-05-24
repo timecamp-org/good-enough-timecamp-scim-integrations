@@ -8,6 +8,7 @@ Supported sources:
 - Azure AD / Microsoft Entra ID
 - BambooHR
 - Factorial
+- HiBob
 
 ## Quick Start
 

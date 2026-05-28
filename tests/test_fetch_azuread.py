@@ -121,14 +121,32 @@ class TestTransformAzureUserToSchema:
         result = transform_azure_user_to_schema(
             azure_user,
             prefer_real_email=True,
-            sync_upn_as_additional_email=True
+            additional_email_source="userPrincipalName"
         )
 
         assert result["email"] == "alice@company.com"
         assert result["real_email"] == "alice@company.onmicrosoft.com"
 
-    def test_transform_user_does_not_sync_upn_as_additional_email_by_default(self):
-        """Test that UPN is not stored as real_email unless explicitly enabled."""
+    def test_transform_user_sync_mail_as_additional_email(self):
+        """Test that mail can be stored for additional email sync."""
+        azure_user = {
+            "id": "user-123",
+            "displayName": "Alice Johnson",
+            "mail": "Alice@Company.COM",
+            "userPrincipalName": "alice@company.onmicrosoft.com"
+        }
+
+        result = transform_azure_user_to_schema(
+            azure_user,
+            prefer_real_email=False,
+            additional_email_source="mail"
+        )
+
+        assert result["email"] == "alice@company.onmicrosoft.com"
+        assert result["real_email"] == "alice@company.com"
+
+    def test_transform_user_does_not_sync_additional_email_by_default(self):
+        """Test that real_email is not set unless explicitly enabled."""
         azure_user = {
             "id": "user-123",
             "displayName": "Alice Johnson",
@@ -463,7 +481,7 @@ class TestFetchAzureUsersIntegration:
     @patch('fetch_azuread.load_dotenv')
     @patch('fetch_azuread.requests.get')
     @patch('common.storage.save_json_file')
-    def test_fetch_azure_users_syncs_upn_as_additional_email(
+    def test_fetch_azure_users_syncs_configured_additional_email_source(
         self,
         mock_save,
         mock_get,
@@ -471,10 +489,10 @@ class TestFetchAzureUsersIntegration:
         mock_update_token,
         monkeypatch,
     ):
-        """Test fetching users with UPN stored for additional email sync."""
+        """Test fetching users with configured field stored for additional email sync."""
         monkeypatch.setenv('AZURE_SCIM_ENDPOINT', 'https://graph.microsoft.com/v1.0/users')
-        monkeypatch.setenv('AZURE_PREFER_REAL_EMAIL', 'true')
-        monkeypatch.setenv('AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL', 'true')
+        monkeypatch.setenv('AZURE_PREFER_REAL_EMAIL', 'false')
+        monkeypatch.setenv('AZURE_ADDITIONAL_EMAIL_SOURCE', 'mail')
         monkeypatch.setenv('AZURE_FILTER_GROUPS', '')
         monkeypatch.setenv('AZURE_SUPERVISOR_GROUPS', '')
 
@@ -503,8 +521,8 @@ class TestFetchAzureUsersIntegration:
 
         saved_data = mock_save.call_args[0][0]
 
-        assert saved_data['users'][0]['email'] == 'test@example.com'
-        assert saved_data['users'][0]['real_email'] == 'test@example.onmicrosoft.com'
+        assert saved_data['users'][0]['email'] == 'test@example.onmicrosoft.com'
+        assert saved_data['users'][0]['real_email'] == 'test@example.com'
 
     @patch('fetch_azuread.update_azure_token')
     @patch('fetch_azuread.load_dotenv')

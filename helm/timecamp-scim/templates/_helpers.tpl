@@ -150,8 +150,8 @@ Common environment variables
   value: {{ .supervisorGroups | quote }}
 - name: AZURE_PREFER_REAL_EMAIL
   value: {{ .preferRealEmail | quote }}
-- name: AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL
-  value: {{ .syncUpnAsAdditionalEmail | quote }}
+- name: AZURE_ADDITIONAL_EMAIL_SOURCE
+  value: {{ .additionalEmailSource | quote }}
 - name: AZURE_TOKEN_EXPIRES_AT
   value: {{ .tokenExpiresAt | quote }}
 - name: AZURE_REFRESH_TOKEN_EXPIRES_AT

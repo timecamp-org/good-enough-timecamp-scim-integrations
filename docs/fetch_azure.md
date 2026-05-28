@@ -40,11 +40,18 @@ AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
 AZURE_PREFER_REAL_EMAIL=true
 ```
 
-6. (Optional) Sync UPN as TimeCamp additional email:
+6. (Optional) Sync an Azure email field as TimeCamp additional email:
    - Primary email behavior remains controlled by `AZURE_PREFER_REAL_EMAIL`
-   - To also send Azure `userPrincipalName` to TimeCamp `additional_email`, add:
+   - To use Azure `mail` as primary email and `userPrincipalName` as `additional_email`:
 ```bash
-AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL=true
+AZURE_PREFER_REAL_EMAIL=true
+AZURE_ADDITIONAL_EMAIL_SOURCE=userPrincipalName
+TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC=false
+```
+   - To use Azure `userPrincipalName` as primary email and `mail` as `additional_email`:
+```bash
+AZURE_PREFER_REAL_EMAIL=false
+AZURE_ADDITIONAL_EMAIL_SOURCE=mail
 TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC=false
 ```
 

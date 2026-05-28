@@ -20,7 +20,7 @@ def normalize_text(text):
 def transform_azure_user_to_schema(
     user: dict,
     prefer_real_email: bool = False,
-    sync_upn_as_additional_email: bool = False
+    additional_email_source: str = ""
 ) -> dict:
     """
     Transform an Azure AD user object to our internal schema.
@@ -28,7 +28,7 @@ def transform_azure_user_to_schema(
     Args:
         user: Azure AD user object from Graph API
         prefer_real_email: If True, prefer 'mail' field over 'userPrincipalName'
-        sync_upn_as_additional_email: If True, store userPrincipalName as real_email
+        additional_email_source: Optional Azure field to store as real_email
         
     Returns:
         Transformed user dictionary matching our schema
@@ -63,8 +63,19 @@ def transform_azure_user_to_schema(
         "supervisor_id": manager_id,
     }
 
-    if sync_upn_as_additional_email and user_principal_name:
-        transformed_user["real_email"] = user_principal_name.lower()
+    additional_email_source = (additional_email_source or "").strip().lower()
+    additional_email = None
+    if additional_email_source == "mail":
+        additional_email = mail
+    elif additional_email_source in ("userprincipalname", "upn"):
+        additional_email = user_principal_name
+    elif additional_email_source not in ("", "none"):
+        raise ValueError(
+            "Unsupported additional_email_source. Use 'mail', 'userPrincipalName', or 'none'."
+        )
+
+    if additional_email:
+        transformed_user["real_email"] = additional_email.lower()
     
     return transformed_user
 
@@ -375,7 +386,7 @@ def fetch_azure_users():
         graph_endpoint = os.getenv('AZURE_SCIM_ENDPOINT')
         # Get email preference setting (default is to use federated ID if mail is not available)
         prefer_real_email = os.getenv('AZURE_PREFER_REAL_EMAIL', 'false').lower() == 'true'
-        sync_upn_as_additional_email = os.getenv('AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL', 'false').lower() == 'true'
+        additional_email_source = os.getenv('AZURE_ADDITIONAL_EMAIL_SOURCE', '').strip()
         # Get filter groups setting
         filter_groups_str = os.getenv('AZURE_FILTER_GROUPS', '')
         filter_groups = [g.strip() for g in filter_groups_str.split(',')] if filter_groups_str else []
@@ -468,7 +479,7 @@ def fetch_azure_users():
                 transformed_user = transform_azure_user_to_schema(
                     user,
                     prefer_real_email,
-                    sync_upn_as_additional_email
+                    additional_email_source
                 )
                 if user_id in supervisor_user_ids:
                     transformed_user['role_id'] = '2'

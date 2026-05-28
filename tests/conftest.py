@@ -189,6 +189,7 @@ def mock_env_vars(monkeypatch):
         "AZURE_CLIENT_SECRET": "test-client-secret",
         "AZURE_SCIM_ENDPOINT": "https://graph.microsoft.com/v1.0/users",
         "AZURE_PREFER_REAL_EMAIL": "false",
+        "AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL": "false",
         "AZURE_FILTER_GROUPS": "",
     }
     

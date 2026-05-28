@@ -106,6 +106,40 @@ class TestTransformAzureUserToSchema:
         
         result = transform_azure_user_to_schema(azure_user, prefer_real_email=False)
         assert result["email"] == "alice@company.onmicrosoft.com"
+
+    def test_transform_user_sync_upn_as_additional_email(self):
+        """Test that userPrincipalName can be stored for additional email sync."""
+        azure_user = {
+            "id": "user-123",
+            "displayName": "Alice Johnson",
+            "mail": "alice@company.com",
+            "userPrincipalName": "Alice@Company.OnMicrosoft.COM",
+            "department": "HR",
+            "jobTitle": "HR Manager"
+        }
+
+        result = transform_azure_user_to_schema(
+            azure_user,
+            prefer_real_email=True,
+            sync_upn_as_additional_email=True
+        )
+
+        assert result["email"] == "alice@company.com"
+        assert result["real_email"] == "alice@company.onmicrosoft.com"
+
+    def test_transform_user_does_not_sync_upn_as_additional_email_by_default(self):
+        """Test that UPN is not stored as real_email unless explicitly enabled."""
+        azure_user = {
+            "id": "user-123",
+            "displayName": "Alice Johnson",
+            "mail": "alice@company.com",
+            "userPrincipalName": "alice@company.onmicrosoft.com"
+        }
+
+        result = transform_azure_user_to_schema(azure_user, prefer_real_email=True)
+
+        assert result["email"] == "alice@company.com"
+        assert "real_email" not in result
     
     def test_transform_user_no_manager(self):
         """Test transformation of user without manager."""
@@ -424,6 +458,53 @@ class TestFetchAzureUsersIntegration:
         assert len(saved_data['users']) == 1
         assert saved_data['users'][0]['external_id'] == 'user-1'
         assert saved_data['users'][0]['name'] == 'Test User'
+
+    @patch('fetch_azuread.update_azure_token')
+    @patch('fetch_azuread.load_dotenv')
+    @patch('fetch_azuread.requests.get')
+    @patch('common.storage.save_json_file')
+    def test_fetch_azure_users_syncs_upn_as_additional_email(
+        self,
+        mock_save,
+        mock_get,
+        mock_load_dotenv,
+        mock_update_token,
+        monkeypatch,
+    ):
+        """Test fetching users with UPN stored for additional email sync."""
+        monkeypatch.setenv('AZURE_SCIM_ENDPOINT', 'https://graph.microsoft.com/v1.0/users')
+        monkeypatch.setenv('AZURE_PREFER_REAL_EMAIL', 'true')
+        monkeypatch.setenv('AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL', 'true')
+        monkeypatch.setenv('AZURE_FILTER_GROUPS', '')
+        monkeypatch.setenv('AZURE_SUPERVISOR_GROUPS', '')
+
+        mock_update_token.return_value = 'mock_token'
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'value': [
+                {
+                    'id': 'user-1',
+                    'displayName': 'Test User',
+                    'mail': 'test@example.com',
+                    'userPrincipalName': 'test@example.onmicrosoft.com',
+                    'department': 'IT',
+                    'jobTitle': 'Developer',
+                    'manager': None
+                }
+            ],
+            '@odata.nextLink': None
+        }
+        mock_get.return_value = mock_response
+
+        from fetch_azuread import fetch_azure_users
+        fetch_azure_users()
+
+        saved_data = mock_save.call_args[0][0]
+
+        assert saved_data['users'][0]['email'] == 'test@example.com'
+        assert saved_data['users'][0]['real_email'] == 'test@example.onmicrosoft.com'
 
     @patch('fetch_azuread.update_azure_token')
     @patch('fetch_azuread.load_dotenv')

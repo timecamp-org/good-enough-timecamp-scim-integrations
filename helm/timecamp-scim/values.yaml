@@ -182,6 +182,7 @@ config:
     filterGroups: ""  # Comma-separated list of groups
     supervisorGroups: ""  # Comma-separated list of groups whose members become TimeCamp supervisors
     preferRealEmail: false
+    syncUpnAsAdditionalEmail: false  # Sync userPrincipalName to TimeCamp additional_email without changing primary email
     tokenExpiresAt: ""
     refreshTokenExpiresAt: ""
   

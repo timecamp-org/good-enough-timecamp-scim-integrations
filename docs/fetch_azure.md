@@ -40,7 +40,15 @@ AZURE_CLIENT_SECRET=your-client-secret  # The secret value you copied
 AZURE_PREFER_REAL_EMAIL=true
 ```
 
-6. (Optional) Grant TimeCamp supervisor role from Azure groups:
+6. (Optional) Sync UPN as TimeCamp additional email:
+   - Primary email behavior remains controlled by `AZURE_PREFER_REAL_EMAIL`
+   - To also send Azure `userPrincipalName` to TimeCamp `additional_email`, add:
+```bash
+AZURE_SYNC_UPN_AS_ADDITIONAL_EMAIL=true
+TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC=false
+```
+
+7. (Optional) Grant TimeCamp supervisor role from Azure groups:
    - Create one or more Azure AD / Entra ID groups for supervisors, for example `TimeCamp Supervisors`
    - Add the desired users to those groups
    - Configure them in `.env` as a comma-separated list:

@@ -1024,6 +1024,23 @@ class TestTimeCampSynchronizer:
 
         mock_timecamp_api.delete_group.assert_not_called()
 
+    def test_remove_empty_groups_keeps_disabled_users_group(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that the configured disabled users group is not removed when empty."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+        mock_timecamp_config.disabled_users_group_id = 101
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': '-Deactivated', 'parent_id': '100'},
+        ]
+        mock_timecamp_api.get_users.return_value = []
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=False)
+
+        mock_timecamp_api.delete_group.assert_not_called()
+
     def test_remove_empty_groups_removes_nested_empty_groups(self, mock_timecamp_api, mock_timecamp_config):
         """Test that nested empty groups are removed bottom-up."""
         mock_timecamp_config.remove_empty_groups = True

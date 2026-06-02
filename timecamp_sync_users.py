@@ -859,10 +859,22 @@ class TimeCampSynchronizer:
 
         removed_count = 0
         removed_ids = set()
+        protected_group_id = (
+            str(self.config.disabled_users_group_id)
+            if self.config.disabled_users_group_id
+            else None
+        )
 
         for gid, depth in descendants_with_depth:
             # Skip if already removed (shouldn't happen, but safety check)
             if gid in removed_ids:
+                continue
+
+            if gid == protected_group_id:
+                group_name = groups_by_id[gid]['name'] if gid in groups_by_id else gid
+                logger.info(
+                    f"Skipping empty disabled users group: '{group_name}' (ID: {gid})"
+                )
                 continue
 
             # Check if group has users

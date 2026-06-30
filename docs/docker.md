@@ -8,6 +8,7 @@ docker compose build
 # Run specific commands using predefined services:
 
 docker compose run --rm fetch-bamboohr
+docker compose run --rm fetch-hibob
 docker compose run --rm fetch-azuread
 docker compose run --rm fetch-ldap
 docker compose run --rm fetch-factorial
@@ -26,9 +27,11 @@ docker compose run --rm sync-users --debug
 
 # HTTP Service (run scripts via REST API on port 8181)
 docker compose up -d http-service
+curl -X POST http://localhost:8181/run -H 'Content-Type: application/json' -d '{"script":"fetch_hibob.py","args":["--debug"]}'
 
 # Sample sync command
 docker compose run --rm fetch-ldap && docker compose run --rm prepare-timecamp && docker compose run --rm sync-users --debug
+docker compose run --rm fetch-hibob && docker compose run --rm prepare-timecamp && docker compose run --rm sync-users --debug
 
 # Sample visualization command
 docker compose run --rm fetch-ldap && docker compose run --rm prepare-timecamp && docker compose run --rm display-tree --html var/structure.html

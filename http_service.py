@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # List of available Python scripts in the project
 AVAILABLE_SCRIPTS = [
     'fetch_bamboohr.py',
+    'fetch_hibob.py',
     'fetch_azuread.py', 
     'fetch_ldap.py',
     'fetch_factorialhr.py',
@@ -170,4 +171,4 @@ def run_script_internal(script, args):
 
 if __name__ == '__main__':
     # Run the Flask app
-    app.run(host='0.0.0.0', port=8181, debug=False) 
+    app.run(host='0.0.0.0', port=8181, debug=False)

@@ -86,6 +86,13 @@ jobs:
     command: ["python", "fetch_bamboohr.py"]
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 3
+
+  fetchHibob:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_hibob.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
     
   fetchAzuread:
     enabled: false
@@ -173,6 +180,14 @@ config:
     excludeFilter: ""
     excludedDepartments: ""  # Comma-separated list
     supervisorRule: ""  # Rule for determining supervisors (e.g., "contains:Manager")
+
+  # HiBob Configuration
+  hibob:
+    serviceUserId: ""  # HiBob service user ID
+    excludeFilter: ""  # HiBob people/search filter JSON
+    excludedDepartments: ""  # Comma-separated list
+    supervisorRule: ""  # Rule for determining supervisors (e.g., "work.isManager:true")
+    customFields: ""  # Comma-separated list of additional HiBob field paths
   
   # Azure AD Configuration
   azure:

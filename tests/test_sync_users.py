@@ -6,6 +6,19 @@ from unittest.mock import MagicMock, Mock, patch, call
 from timecamp_sync_users import TimeCampSynchronizer
 
 
+def make_created_timecamp_users(sample_timecamp_users):
+    return [
+        {
+            'user_id': str(index),
+            'email': user['timecamp_email'],
+            'display_name': user['timecamp_user_name'],
+            'group_id': '101',
+            'is_enabled': True,
+        }
+        for index, user in enumerate(sample_timecamp_users, start=1001)
+    ]
+
+
 class TestTimeCampSynchronizer:
     """Tests for the TimeCampSynchronizer class."""
     
@@ -965,15 +978,17 @@ class TestTimeCampSynchronizer:
         mock_timecamp_api.get_groups.return_value = [
             {'group_id': '100', 'name': 'Root', 'parent_id': '0'}
         ]
-        mock_timecamp_api.get_users.return_value = []
+        mock_timecamp_api.get_users.side_effect = [[], make_created_timecamp_users(sample_timecamp_users)]
         mock_timecamp_api.add_group.return_value = '101'
         
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
-        sync.sync(sample_timecamp_users, dry_run=False)
+        with patch('timecamp_sync_users.time.sleep') as mock_sleep:
+            sync.sync(sample_timecamp_users, dry_run=False)
         
         # Should have called the API
         assert mock_timecamp_api.get_groups.called
         assert mock_timecamp_api.get_users.called
+        mock_sleep.assert_not_called()
 
     def test_remove_empty_groups_deletes_leaf_without_users(self, mock_timecamp_api, mock_timecamp_config):
         """Test that empty leaf groups are removed."""
@@ -1003,6 +1018,23 @@ class TestTimeCampSynchronizer:
         mock_timecamp_api.get_users.return_value = [
             {'user_id': '1', 'email': 'user@test.com', 'group_id': '101'}
         ]
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync._remove_empty_groups(dry_run=False)
+
+        mock_timecamp_api.delete_group.assert_not_called()
+
+    def test_remove_empty_groups_keeps_disabled_users_group(self, mock_timecamp_api, mock_timecamp_config):
+        """Test that the configured disabled users group is not removed when empty."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.root_group_id = 100
+        mock_timecamp_config.disabled_users_group_id = 101
+
+        mock_timecamp_api.get_groups.return_value = [
+            {'group_id': '100', 'name': 'Root', 'parent_id': '0'},
+            {'group_id': '101', 'name': '-Deactivated', 'parent_id': '100'},
+        ]
+        mock_timecamp_api.get_users.return_value = []
 
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
         sync._remove_empty_groups(dry_run=False)
@@ -1074,11 +1106,13 @@ class TestTimeCampSynchronizer:
         mock_timecamp_api.get_groups.return_value = [
             {'group_id': '100', 'name': 'Root', 'parent_id': '0'}
         ]
-        mock_timecamp_api.get_users.return_value = []
+        mock_timecamp_api.get_users.side_effect = [[], make_created_timecamp_users(sample_timecamp_users)]
         mock_timecamp_api.add_group.return_value = '101'
 
         sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
-        sync.sync(sample_timecamp_users, dry_run=False)
+        with patch('timecamp_sync_users.time.sleep') as mock_sleep:
+            sync.sync(sample_timecamp_users, dry_run=False)
 
         mock_timecamp_api.delete_group.assert_not_called()
+        mock_sleep.assert_not_called()
 

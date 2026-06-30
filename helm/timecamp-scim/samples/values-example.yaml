@@ -52,6 +52,13 @@ config:
     clientId: "your-client-id"
     filterGroups: "Group1,Group2"  # Groups to include
     supervisorGroups: "Managers,Team Leads"  # Optional: members get TimeCamp supervisor role
+
+  okta:
+    orgUrl: "https://company.okta.com"
+    filterGroups: "TimeCamp Users"  # Optional: exact Okta group names to include
+    supervisorGroups: "TimeCamp Supervisors"  # Optional: members get TimeCamp supervisor role
+    supervisorIdField: "managerId"  # Okta profile field containing manager user ID/login
+    supervisorRule: ""  # Optional: profile field rule, e.g. "timecampSupervisor:yes"
   
   ldap:
     host: "ldap.company.local"
@@ -82,6 +89,10 @@ jobs:
     schedule: "0 */6 * * *"  # Every 6 hours
   
   # fetchAzuread:
+  #   enabled: true
+  #   schedule: "0 */6 * * *"
+
+  # fetchOkta:
   #   enabled: true
   #   schedule: "0 */6 * * *"
   

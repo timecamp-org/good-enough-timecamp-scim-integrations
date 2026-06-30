@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 AVAILABLE_SCRIPTS = [
     'fetch_bamboohr.py',
     'fetch_azuread.py', 
+    'fetch_okta.py',
     'fetch_ldap.py',
     'fetch_factorialhr.py',
     'prepare_timecamp_json_from_fetch.py',
@@ -170,4 +171,4 @@ def run_script_internal(script, args):
 
 if __name__ == '__main__':
     # Run the Flask app
-    app.run(host='0.0.0.0', port=8181, debug=False) 
+    app.run(host='0.0.0.0', port=8181, debug=False)

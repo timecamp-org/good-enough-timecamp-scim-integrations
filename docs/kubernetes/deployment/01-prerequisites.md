@@ -134,6 +134,11 @@ Ensure you have access credentials for your HR system:
 - Client ID and Secret
 - Appropriate Graph API permissions
 
+### Okta
+- Org URL
+- API token with read access to users and groups
+- Optional group names for filtering and supervisor role assignment
+
 ### LDAP
 - LDAP server hostname/IP
 - Bind DN and credentials
@@ -167,6 +172,7 @@ The Kubernetes cluster needs outbound access to:
 # HR Systems (examples)
 443/tcp -> api.bamboohr.com
 443/tcp -> graph.microsoft.com
+443/tcp -> your-okta-domain.okta.com
 389/tcp or 636/tcp -> your-ldap-server
 443/tcp -> api.factorialhr.com
 

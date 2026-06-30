@@ -78,6 +78,7 @@ gcloud iam service-accounts add-iam-policy-binding $SA_EMAIL \
      "AZURE_CLIENT_SECRET": "your-actual-azure-secret",
      "AZURE_BEARER_TOKEN": "",
      "AZURE_REFRESH_TOKEN": "",
+     "OKTA_API_TOKEN": "your-actual-okta-api-token",
      "LDAP_PASSWORD": "your-actual-ldap-password",
      "FACTORIAL_API_KEY": "your-actual-factorial-key",
      "S3_ACCESS_KEY_ID": "your-s3-access-key",

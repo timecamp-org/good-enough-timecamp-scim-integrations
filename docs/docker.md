@@ -9,6 +9,7 @@ docker compose build
 
 docker compose run --rm fetch-bamboohr
 docker compose run --rm fetch-azuread
+docker compose run --rm fetch-okta
 docker compose run --rm fetch-ldap
 docker compose run --rm fetch-factorial
 

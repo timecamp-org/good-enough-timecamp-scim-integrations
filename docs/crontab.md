@@ -10,6 +10,9 @@ crontab -e
 # Fetch users from BambooHR every hour
 0 * * * * cd /path/to/project && python fetch_bamboohr.py
 
+# For Okta, use fetch_okta.py instead:
+# 0 * * * * cd /path/to/project && python fetch_okta.py
+
 # Prepare TimeCamp data 10 minutes after fetch
 10 * * * * cd /path/to/project && python prepare_timecamp_json_from_fetch.py
 

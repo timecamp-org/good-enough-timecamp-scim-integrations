@@ -93,6 +93,13 @@ jobs:
     command: ["python", "fetch_azuread.py"]
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 3
+
+  fetchOkta:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_okta.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
     
   fetchLdap:
     enabled: false
@@ -184,6 +191,20 @@ config:
     preferRealEmail: false
     tokenExpiresAt: ""
     refreshTokenExpiresAt: ""
+
+  # Okta Configuration
+  okta:
+    orgUrl: ""  # Your Okta org URL, e.g. https://company.okta.com
+    userStatuses: "ACTIVE"  # Comma-separated Okta statuses to fetch
+    filterGroups: ""  # Comma-separated list of exact Okta group names to include
+    supervisorGroups: ""  # Comma-separated list of exact Okta group names whose members become TimeCamp supervisors
+    excludedDepartments: ""  # Comma-separated list
+    emailField: "email"
+    nameField: "displayName"
+    departmentField: "department"
+    jobTitleField: "title"
+    supervisorIdField: "managerId"
+    supervisorRule: ""  # Rule for is_supervisor, e.g. "timecampSupervisor:yes"
   
   # LDAP Configuration
   ldap:

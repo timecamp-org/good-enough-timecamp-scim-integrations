@@ -6,6 +6,7 @@ TimeCamp REST API. The workflow is always: fetch users -> transform -> sync.
 Supported sources:
 - LDAP
 - Azure AD / Microsoft Entra ID
+- Okta
 - BambooHR
 - Factorial
 - HiBob
@@ -19,6 +20,7 @@ cp .env.sample .env
 # 2. Fetch employees from your source system (pick one)
 uv run --python 3.14 --with-requirements requirements.txt fetch_ldap.py
 # uv run fetch_azuread.py
+# uv run fetch_okta.py
 # uv run fetch_bamboohr.py
 # uv run fetch_factorialhr.py
 
@@ -56,6 +58,7 @@ flowchart LR
 
 - **[docs/.env.example](docs/.env.example)** - Environment variable configuration list
 - **[docs/fetch_azure.md](docs/fetch_azure.md)** - Fetching users from Azure AD / Entra ID
+- **[docs/fetch_okta.md](docs/fetch_okta.md)** - Fetching users from Okta
 - **[docs/fetch_ldap.md](docs/fetch_ldap.md)** - Fetching users from LDAP
 - **[docs/docker.md](docs/docker.md)** - Docker and compose usage
 - **[docs/crontab.md](docs/crontab.md)** - Cron setup for scheduled runs

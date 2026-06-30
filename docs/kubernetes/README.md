@@ -37,7 +37,8 @@ For a quick deployment, follow these steps:
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   HR Systems    │───▶│ SCIM Integration │───▶│   TimeCamp      │
-│ (BambooHR, etc) │    │   (Kubernetes)   │    │   (API)         │
+│ BambooHR, HiBob │    │   (Kubernetes)   │    │   (API)         │
+│ Azure AD, etc.  │    │                  │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                               │
                               ▼

@@ -75,6 +75,7 @@ gcloud iam service-accounts add-iam-policy-binding $SA_EMAIL \
    {
      "TIMECAMP_API_KEY": "your-actual-timecamp-api-key",
      "BAMBOOHR_API_KEY": "your-actual-bamboohr-api-key",
+     "HIBOB_SERVICE_USER_TOKEN": "your-actual-hibob-service-user-token",
      "AZURE_CLIENT_SECRET": "your-actual-azure-secret",
      "AZURE_BEARER_TOKEN": "",
      "AZURE_REFRESH_TOKEN": "",
@@ -272,7 +273,7 @@ Implement regular secret rotation:
 #!/bin/bash
 # rotate-secrets.sh
 
-# Generate new API key (example for BambooHR)
+# Generate new API key or token (example for BambooHR)
 NEW_API_KEY=$(generate_new_bamboohr_key)
 
 # Update secret

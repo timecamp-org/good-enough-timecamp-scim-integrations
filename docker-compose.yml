@@ -53,6 +53,13 @@ services:
       - BAMBOOHR_EXCLUDE_FILTER=${BAMBOOHR_EXCLUDE_FILTER:-}
       - BAMBOOHR_EXCLUDED_DEPARTMENTS=${BAMBOOHR_EXCLUDED_DEPARTMENTS:-}
       - BAMBOOHR_SUPERVISOR_RULE=${BAMBOOHR_SUPERVISOR_RULE:-}
+      # HiBob Configuration
+      - HIBOB_SERVICE_USER_ID=${HIBOB_SERVICE_USER_ID:-}
+      - HIBOB_SERVICE_USER_TOKEN=${HIBOB_SERVICE_USER_TOKEN:-}
+      - HIBOB_EXCLUDE_FILTER=${HIBOB_EXCLUDE_FILTER:-}
+      - HIBOB_EXCLUDED_DEPARTMENTS=${HIBOB_EXCLUDED_DEPARTMENTS:-}
+      - HIBOB_SUPERVISOR_RULE=${HIBOB_SUPERVISOR_RULE:-}
+      - HIBOB_CUSTOM_FIELDS=${HIBOB_CUSTOM_FIELDS:-}
       # Azure AD Configuration
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
@@ -97,6 +104,10 @@ services:
   fetch-bamboohr:
     extends: timecamp-scim
     command: ["python", "fetch_bamboohr.py"]
+
+  fetch-hibob:
+    extends: timecamp-scim
+    command: ["python", "fetch_hibob.py"]
     
   fetch-azuread:
     extends: timecamp-scim
@@ -144,4 +155,4 @@ services:
 networks:
   timecamp-scim-network:
     driver: bridge
-    # internal: true 
+    # internal: true

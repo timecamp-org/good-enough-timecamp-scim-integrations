@@ -10,6 +10,9 @@ crontab -e
 # Fetch users from BambooHR every hour
 0 * * * * cd /path/to/project && python fetch_bamboohr.py
 
+# For HiBob, use this fetch command instead:
+# 0 * * * * cd /path/to/project && python fetch_hibob.py
+
 # Prepare TimeCamp data 10 minutes after fetch
 10 * * * * cd /path/to/project && python prepare_timecamp_json_from_fetch.py
 

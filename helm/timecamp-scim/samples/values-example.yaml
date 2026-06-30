@@ -59,6 +59,7 @@ config:
     clientId: "your-client-id"
     filterGroups: "Group1,Group2"  # Groups to include
     supervisorGroups: "Managers,Team Leads"  # Optional: members get TimeCamp supervisor role
+    additionalEmailSource: ""  # Optional: mail or userPrincipalName
   
   ldap:
     host: "ldap.company.local"

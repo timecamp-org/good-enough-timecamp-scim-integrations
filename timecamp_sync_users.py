@@ -803,12 +803,17 @@ class TimeCampSynchronizer:
                 for name, value in settings.items():
                     logger.info(f"[DRY RUN] Would apply pending {name}={value} for user {email} (ID: {user_id})")
 
-    def _remove_empty_groups(self, dry_run: bool = False) -> None:
-        """Remove empty groups (no users) under root_group_id, bottom-up.
+    def _remove_empty_groups(
+        self,
+        dry_run: bool = False,
+        protected_group_ids: Optional[Set[str]] = None,
+    ) -> None:
+        """Remove obsolete empty groups under root_group_id, bottom-up.
 
         Recursively removes leaf groups that have no users assigned.
         If removing a leaf makes its parent empty (no users and no remaining children),
-        the parent is removed too.
+        the parent is removed too. Groups required by the current source hierarchy are
+        protected even when user updates are disabled and they are temporarily empty.
         """
         # Fetch current groups and users
         all_groups = self.api.get_groups()
@@ -859,7 +864,10 @@ class TimeCampSynchronizer:
 
         removed_count = 0
         removed_ids = set()
-        protected_group_id = (
+        protected_group_ids = {
+            str(group_id) for group_id in (protected_group_ids or set())
+        }
+        disabled_users_group_id = (
             str(self.config.disabled_users_group_id)
             if self.config.disabled_users_group_id
             else None
@@ -868,13 +876,6 @@ class TimeCampSynchronizer:
         for gid, depth in descendants_with_depth:
             # Skip if already removed (shouldn't happen, but safety check)
             if gid in removed_ids:
-                continue
-
-            if gid == protected_group_id:
-                group_name = groups_by_id[gid]['name'] if gid in groups_by_id else gid
-                logger.info(
-                    f"Skipping empty disabled users group: '{group_name}' (ID: {gid})"
-                )
                 continue
 
             # Check if group has users
@@ -887,6 +888,20 @@ class TimeCampSynchronizer:
                 if child_id not in removed_ids
             ]
             if remaining_children:
+                continue
+
+            if gid in protected_group_ids:
+                group_name = groups_by_id[gid]['name'] if gid in groups_by_id else gid
+                logger.info(
+                    f"Skipping source-required empty group: '{group_name}' (ID: {gid})"
+                )
+                continue
+
+            if gid == disabled_users_group_id:
+                group_name = groups_by_id[gid]['name'] if gid in groups_by_id else gid
+                logger.info(
+                    f"Skipping empty disabled users group: '{group_name}' (ID: {gid})"
+                )
                 continue
 
             # Group is empty (no users, no remaining children) — remove it
@@ -932,7 +947,12 @@ class TimeCampSynchronizer:
         # Step 4: Remove empty groups if configured
         if self.config.remove_empty_groups:
             logger.info("Removing empty groups...")
-            self._remove_empty_groups(dry_run)
+            required_group_ids = {
+                str(group_structure[path]['group_id'])
+                for path in required_groups
+                if path in group_structure
+            }
+            self._remove_empty_groups(dry_run, required_group_ids)
 
         # Step 5: Process pending new users from previous runs
         if self.config.persistent_settings:
@@ -1018,4 +1038,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main()) 
+    exit(main())

@@ -100,6 +100,13 @@ jobs:
     command: ["python", "fetch_azuread.py"]
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 3
+
+  fetchOkta:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_okta.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
     
   fetchLdap:
     enabled: false
@@ -200,6 +207,22 @@ config:
     additionalEmailSource: ""  # Optional Azure field for TimeCamp additional_email: mail or userPrincipalName
     tokenExpiresAt: ""
     refreshTokenExpiresAt: ""
+
+  # Okta Configuration
+  okta:
+    orgUrl: ""  # Your Okta org URL, e.g. https://company.okta.com
+    userStatuses: "ACTIVE"  # Comma-separated Okta statuses to fetch
+    filterGroups: ""  # Comma-separated list of exact Okta group names to include
+    supervisorGroups: ""  # Comma-separated list of exact Okta group names whose members become TimeCamp supervisors
+    excludedDepartments: ""  # Comma-separated list
+    externalIdField: "id"  # Okta profile field used as TimeCamp external ID
+    emailField: "email"
+    nameField: "displayName"
+    departmentField: "department"
+    jobTitleField: "title"
+    supervisorIdField: "managerId"
+    supervisorMatchField: ""  # Manager field compared with supervisorIdField; defaults to externalIdField
+    supervisorRule: ""  # Rule for is_supervisor, e.g. "timecampSupervisor:yes"
   
   # LDAP Configuration
   ldap:

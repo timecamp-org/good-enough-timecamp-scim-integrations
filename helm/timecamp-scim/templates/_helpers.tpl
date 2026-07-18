@@ -174,6 +174,37 @@ Common environment variables
 - name: AZURE_REFRESH_TOKEN_EXPIRES_AT
   value: {{ .refreshTokenExpiresAt | quote }}
 {{- end }}
+{{- /* Okta Configuration */ -}}
+{{- with .Values.config.okta }}
+{{- if .orgUrl }}
+- name: OKTA_ORG_URL
+  value: {{ .orgUrl | quote }}
+{{- end }}
+- name: OKTA_USER_STATUSES
+  value: {{ .userStatuses | quote }}
+- name: OKTA_FILTER_GROUPS
+  value: {{ .filterGroups | quote }}
+- name: OKTA_SUPERVISOR_GROUPS
+  value: {{ .supervisorGroups | quote }}
+- name: OKTA_EXCLUDED_DEPARTMENTS
+  value: {{ .excludedDepartments | quote }}
+- name: OKTA_EXTERNAL_ID_FIELD
+  value: {{ .externalIdField | quote }}
+- name: OKTA_EMAIL_FIELD
+  value: {{ .emailField | quote }}
+- name: OKTA_NAME_FIELD
+  value: {{ .nameField | quote }}
+- name: OKTA_DEPARTMENT_FIELD
+  value: {{ .departmentField | quote }}
+- name: OKTA_JOB_TITLE_FIELD
+  value: {{ .jobTitleField | quote }}
+- name: OKTA_SUPERVISOR_ID_FIELD
+  value: {{ .supervisorIdField | quote }}
+- name: OKTA_SUPERVISOR_MATCH_FIELD
+  value: {{ .supervisorMatchField | quote }}
+- name: OKTA_SUPERVISOR_RULE
+  value: {{ .supervisorRule | quote }}
+{{- end }}
 {{- /* LDAP Configuration */ -}}
 {{- with .Values.config.ldap }}
 {{- if .host }}
@@ -290,6 +321,14 @@ Secret environment variables from External Secrets
     secretKeyRef:
       name: {{ include "timecamp-scim.fullname" . }}-secrets
       key: AZURE_REFRESH_TOKEN
+      optional: true
+{{- end }}
+{{- if or .Values.jobs.fetchOkta.enabled }}
+- name: OKTA_API_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "timecamp-scim.fullname" . }}-secrets
+      key: OKTA_API_TOKEN
       optional: true
 {{- end }}
 {{- if or .Values.jobs.fetchLdap.enabled }}

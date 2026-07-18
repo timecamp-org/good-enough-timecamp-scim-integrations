@@ -17,6 +17,7 @@ AVAILABLE_SCRIPTS = [
     'fetch_bamboohr.py',
     'fetch_hibob.py',
     'fetch_azuread.py', 
+    'fetch_okta.py',
     'fetch_ldap.py',
     'fetch_factorialhr.py',
     'prepare_timecamp_json_from_fetch.py',

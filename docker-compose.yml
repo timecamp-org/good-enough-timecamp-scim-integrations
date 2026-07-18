@@ -73,6 +73,21 @@ services:
       - AZURE_TOKEN_EXPIRES_AT=${AZURE_TOKEN_EXPIRES_AT:-}
       - AZURE_REFRESH_TOKEN=${AZURE_REFRESH_TOKEN:-}
       - AZURE_REFRESH_TOKEN_EXPIRES_AT=${AZURE_REFRESH_TOKEN_EXPIRES_AT:-}
+      # Okta Configuration
+      - OKTA_ORG_URL=${OKTA_ORG_URL:-}
+      - OKTA_API_TOKEN=${OKTA_API_TOKEN:-}
+      - OKTA_USER_STATUSES=${OKTA_USER_STATUSES:-ACTIVE}
+      - OKTA_FILTER_GROUPS=${OKTA_FILTER_GROUPS:-}
+      - OKTA_SUPERVISOR_GROUPS=${OKTA_SUPERVISOR_GROUPS:-}
+      - OKTA_EXCLUDED_DEPARTMENTS=${OKTA_EXCLUDED_DEPARTMENTS:-}
+      - OKTA_EXTERNAL_ID_FIELD=${OKTA_EXTERNAL_ID_FIELD:-id}
+      - OKTA_EMAIL_FIELD=${OKTA_EMAIL_FIELD:-email}
+      - OKTA_NAME_FIELD=${OKTA_NAME_FIELD:-displayName}
+      - OKTA_DEPARTMENT_FIELD=${OKTA_DEPARTMENT_FIELD:-department}
+      - OKTA_JOB_TITLE_FIELD=${OKTA_JOB_TITLE_FIELD:-title}
+      - OKTA_SUPERVISOR_ID_FIELD=${OKTA_SUPERVISOR_ID_FIELD:-managerId}
+      - OKTA_SUPERVISOR_MATCH_FIELD=${OKTA_SUPERVISOR_MATCH_FIELD:-}
+      - OKTA_SUPERVISOR_RULE=${OKTA_SUPERVISOR_RULE:-}
       # LDAP Configuration
       - LDAP_HOST=${LDAP_HOST:-}
       - LDAP_PORT=${LDAP_PORT:-389}
@@ -113,6 +128,10 @@ services:
   fetch-azuread:
     extends: timecamp-scim
     command: ["python", "fetch_azuread.py"]
+
+  fetch-okta:
+    extends: timecamp-scim
+    command: ["python", "fetch_okta.py"]
     
   fetch-ldap:
     extends: timecamp-scim

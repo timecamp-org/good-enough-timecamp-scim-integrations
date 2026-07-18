@@ -227,6 +227,24 @@ jobs:
     schedule: "0 */6 * * *"
 ```
 
+### Okta
+
+```yaml
+config:
+  okta:
+    orgUrl: "https://company.okta.com"
+    filterGroups: "Engineering,Sales"
+    supervisorGroups: "Managers,Team Leads"
+    externalIdField: "employeeNumber"
+    supervisorIdField: "managerId"
+    supervisorMatchField: "email"
+
+jobs:
+  fetchOkta:
+    enabled: true
+    schedule: "0 */6 * * *"
+```
+
 ### LDAP
 
 ```yaml

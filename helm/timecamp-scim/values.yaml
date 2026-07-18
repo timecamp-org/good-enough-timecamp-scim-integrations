@@ -199,11 +199,13 @@ config:
     filterGroups: ""  # Comma-separated list of exact Okta group names to include
     supervisorGroups: ""  # Comma-separated list of exact Okta group names whose members become TimeCamp supervisors
     excludedDepartments: ""  # Comma-separated list
+    externalIdField: "id"  # Okta profile field used as TimeCamp external ID
     emailField: "email"
     nameField: "displayName"
     departmentField: "department"
     jobTitleField: "title"
     supervisorIdField: "managerId"
+    supervisorMatchField: ""  # Manager field compared with supervisorIdField; defaults to externalIdField
     supervisorRule: ""  # Rule for is_supervisor, e.g. "timecampSupervisor:yes"
   
   # LDAP Configuration

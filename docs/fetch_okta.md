@@ -11,17 +11,31 @@ OKTA_USER_STATUSES=ACTIVE
 OKTA_FILTER_GROUPS=TimeCamp Users
 OKTA_SUPERVISOR_GROUPS=TimeCamp Supervisors
 OKTA_EXCLUDED_DEPARTMENTS=
+OKTA_EXTERNAL_ID_FIELD=id
 OKTA_EMAIL_FIELD=email
 OKTA_NAME_FIELD=displayName
 OKTA_DEPARTMENT_FIELD=department
 OKTA_JOB_TITLE_FIELD=title
 OKTA_SUPERVISOR_ID_FIELD=managerId
+OKTA_SUPERVISOR_MATCH_FIELD=
 OKTA_SUPERVISOR_RULE=
 ```
 
 `OKTA_FILTER_GROUPS` and `OKTA_SUPERVISOR_GROUPS` are exact Okta group names. Filtering limits the users synced into TimeCamp. Supervisor groups set `role_id=2` for matching users.
 
-`OKTA_SUPERVISOR_ID_FIELD` should point to an Okta profile field containing the manager's Okta user ID or login. The fetcher uses it to pull missing supervisors so supervisor hierarchy transforms can still work.
+`OKTA_EXTERNAL_ID_FIELD` selects the Okta profile field stored as the TimeCamp external ID. It defaults to Okta's top-level `id`.
+
+`OKTA_SUPERVISOR_ID_FIELD` selects the field containing a manager reference. `OKTA_SUPERVISOR_MATCH_FIELD` selects the field on the manager that reference is compared against. After finding the manager, the fetcher writes the manager's configured external ID to `supervisor_id`.
+
+For example, when TimeCamp should use `employeeNumber` as its external ID but Okta's `managerId` contains the manager's email:
+
+```env
+OKTA_EXTERNAL_ID_FIELD=employeeNumber
+OKTA_SUPERVISOR_ID_FIELD=managerId
+OKTA_SUPERVISOR_MATCH_FIELD=email
+```
+
+When `OKTA_SUPERVISOR_MATCH_FIELD` is empty, it defaults to `OKTA_EXTERNAL_ID_FIELD`, preserving the direct-ID behavior. The fetcher uses Okta user search to pull missing supervisors by standard or custom profile fields. These settings support dotted paths such as `profile.email`.
 
 `OKTA_SUPERVISOR_RULE` optionally sets `is_supervisor=true` based on a profile field value, for example:
 

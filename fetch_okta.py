@@ -79,6 +79,33 @@ def get_profile_value(user, field_name, default=""):
     return profile.get(field_name, default)
 
 
+def get_external_id(user, field_name):
+    """Read the configured identifier, defaulting to Okta's top-level user ID."""
+    if not field_name or field_name == "id":
+        value = user.get("id", "")
+    else:
+        value = get_profile_value(user, field_name)
+
+    return str(value) if value is not None else ""
+
+
+def normalize_match_value(value, field_name):
+    """Normalize identifiers used to match manager references to Okta users."""
+    normalized = str(value).strip() if value is not None else ""
+    field_leaf = (field_name or "").rsplit(".", 1)[-1].lower()
+    if field_leaf in {"email", "login"}:
+        return normalized.casefold()
+    return normalized
+
+
+def get_supervisor_reference(user, field_name):
+    """Read the raw manager reference from an Okta user."""
+    value = get_profile_value(user, field_name)
+    if isinstance(value, dict):
+        value = value.get("id", "")
+    return str(value) if value else ""
+
+
 def build_display_name(profile, name_field):
     """Build a stable display name from Okta profile fields."""
     display_name = profile.get(name_field) if name_field else ""
@@ -119,11 +146,10 @@ def transform_okta_user_to_schema(user, field_config=None, supervisor_field=None
     department_field = field_config.get("department", "department")
     job_title_field = field_config.get("job_title", "title")
     supervisor_id_field = field_config.get("supervisor_id", "managerId")
+    external_id_field = field_config.get("external_id", "id")
 
     email = get_profile_value(user, email_field) or profile.get("login", "")
-    supervisor_id = get_profile_value(user, supervisor_id_field)
-    if isinstance(supervisor_id, dict):
-        supervisor_id = supervisor_id.get("id", "")
+    supervisor_id = get_supervisor_reference(user, supervisor_id_field)
 
     is_supervisor = False
     if supervisor_field and supervisor_value is not None:
@@ -131,7 +157,7 @@ def transform_okta_user_to_schema(user, field_config=None, supervisor_field=None
         is_supervisor = str(field_value).strip() == supervisor_value
 
     return {
-        "external_id": user.get("id", ""),
+        "external_id": get_external_id(user, external_id_field),
         "name": build_display_name(profile, name_field),
         "email": str(email).lower() if email else "",
         "department": get_profile_value(user, department_field, ""),
@@ -141,6 +167,51 @@ def transform_okta_user_to_schema(user, field_config=None, supervisor_field=None
         "is_supervisor": is_supervisor,
         "raw_data": user,
     }
+
+
+def resolve_supervisor_ids(users, field_config, supervisor_match_field):
+    """Translate raw manager references to the managers' configured external IDs."""
+    supervisor_id_field = field_config.get("supervisor_id", "managerId")
+    users_by_match_value = {}
+
+    for user in users:
+        external_id = user.get("external_id")
+        raw_data = user.get("raw_data", {})
+        match_value = normalize_match_value(
+            get_external_id(raw_data, supervisor_match_field),
+            supervisor_match_field,
+        )
+        if not external_id or not match_value:
+            continue
+
+        existing_external_id = users_by_match_value.get(match_value)
+        if existing_external_id and existing_external_id != external_id:
+            raise ValueError(
+                f"Okta supervisor match field '{supervisor_match_field}' is not unique: "
+                f"'{match_value}'"
+            )
+        users_by_match_value[match_value] = external_id
+
+    unresolved_references = set()
+    for user in users:
+        raw_data = user.get("raw_data")
+        if raw_data is None:
+            reference = str(user.get("supervisor_id") or "")
+        else:
+            reference = get_supervisor_reference(raw_data, supervisor_id_field)
+        if not reference:
+            user["supervisor_id"] = ""
+            continue
+
+        match_value = normalize_match_value(reference, supervisor_match_field)
+        resolved_external_id = users_by_match_value.get(match_value)
+        if resolved_external_id:
+            user["supervisor_id"] = resolved_external_id
+        else:
+            user["supervisor_id"] = reference
+            unresolved_references.add(reference)
+
+    return unresolved_references
 
 
 class OktaClient:
@@ -196,6 +267,36 @@ class OktaClient:
         response = self.get(f"/api/v1/users/{encoded_user_id}")
         return response.json()
 
+    def find_user_by_field(self, field_name, value):
+        """Find one user by an Okta top-level or profile field."""
+        if field_name in {"id", "login", "profile.login"}:
+            candidate = self.get_user(value)
+            candidate_value = normalize_match_value(
+                get_external_id(candidate, field_name),
+                field_name,
+            )
+            return candidate if candidate_value == normalize_match_value(value, field_name) else None
+
+        search_field = field_name if "." in field_name else f"profile.{field_name}"
+        escaped_value = str(value).replace("\\", "\\\\").replace('"', '\\"')
+        params = {
+            "limit": 2,
+            "search": f'{search_field} eq "{escaped_value}"',
+        }
+        candidates = list(self.paginated_get("/api/v1/users", params=params))
+        normalized_value = normalize_match_value(value, field_name)
+        matches = [
+            candidate
+            for candidate in candidates
+            if normalize_match_value(get_external_id(candidate, field_name), field_name) == normalized_value
+        ]
+
+        if len(matches) > 1:
+            raise ValueError(
+                f"Okta supervisor match field '{field_name}' is not unique: '{value}'"
+            )
+        return matches[0] if matches else None
+
     def find_group_by_name(self, group_name):
         params = {"q": group_name, "limit": 200}
 
@@ -238,11 +339,18 @@ def collect_group_member_ids(group_names, group_purpose, client):
     return member_ids
 
 
-def fetch_missing_supervisors(client, users, field_config, supervisor_field=None, supervisor_value=None):
+def fetch_missing_supervisors(
+    client,
+    users,
+    field_config,
+    supervisor_field=None,
+    supervisor_value=None,
+    supervisor_match_field=None,
+):
     """Fetch supervisors referenced by users but missing from the current output."""
-    existing_ids = {user["external_id"] for user in users if user.get("external_id")}
-    supervisor_ids = {user.get("supervisor_id") for user in users if user.get("supervisor_id")}
-    missing_supervisor_ids = (supervisor_ids - existing_ids) - NOT_FOUND_USERS_CACHE
+    supervisor_match_field = supervisor_match_field or field_config.get("external_id", "id")
+    unresolved_references = resolve_supervisor_ids(users, field_config, supervisor_match_field)
+    missing_supervisor_ids = unresolved_references - NOT_FOUND_USERS_CACHE
 
     if not missing_supervisor_ids:
         return []
@@ -250,11 +358,10 @@ def fetch_missing_supervisors(client, users, field_config, supervisor_field=None
     get_logger().info(f"Found {len(missing_supervisor_ids)} missing Okta supervisors, fetching...")
 
     inactive_supervisors = []
-    new_missing_ids = set()
 
     for supervisor_id in sorted(missing_supervisor_ids):
         try:
-            okta_user = client.get_user(supervisor_id)
+            okta_user = client.find_user_by_field(supervisor_match_field, supervisor_id)
         except requests.exceptions.HTTPError as exc:
             response = getattr(exc, "response", None)
             if response is not None and response.status_code == 404:
@@ -263,15 +370,29 @@ def fetch_missing_supervisors(client, users, field_config, supervisor_field=None
                 continue
             raise
 
+        if not okta_user:
+            NOT_FOUND_USERS_CACHE.add(supervisor_id)
+            get_logger().warning(
+                f"Could not find Okta supervisor where {supervisor_match_field} = '{supervisor_id}'"
+            )
+            continue
+
         user = transform_okta_user_to_schema(okta_user, field_config, supervisor_field, supervisor_value)
+        if not user.get("external_id"):
+            NOT_FOUND_USERS_CACHE.add(supervisor_id)
+            get_logger().warning(
+                f"Could not link Okta supervisor '{supervisor_id}': configured external ID is empty"
+            )
+            continue
         user["status"] = "inactive"
         inactive_supervisors.append(user)
 
-        if user.get("supervisor_id") and user["supervisor_id"] not in existing_ids:
-            new_missing_ids.add(user["supervisor_id"])
-
-    existing_ids.update(user["external_id"] for user in inactive_supervisors if user.get("external_id"))
-    new_missing_ids = (new_missing_ids - existing_ids) - NOT_FOUND_USERS_CACHE
+    all_users = users + inactive_supervisors
+    new_missing_ids = resolve_supervisor_ids(
+        all_users,
+        field_config,
+        supervisor_match_field,
+    ) - NOT_FOUND_USERS_CACHE
 
     if new_missing_ids:
         temp_users = users + inactive_supervisors
@@ -282,8 +403,15 @@ def fetch_missing_supervisors(client, users, field_config, supervisor_field=None
                 field_config,
                 supervisor_field,
                 supervisor_value,
+                supervisor_match_field,
             )
         )
+
+    resolve_supervisor_ids(
+        users + inactive_supervisors,
+        field_config,
+        supervisor_match_field,
+    )
 
     return inactive_supervisors
 
@@ -312,12 +440,16 @@ def fetch_okta_users(debug=False):
         excluded_departments = set(parse_csv(os.getenv("OKTA_EXCLUDED_DEPARTMENTS", "")))
 
         field_config = {
+            "external_id": os.getenv("OKTA_EXTERNAL_ID_FIELD", "id"),
             "email": os.getenv("OKTA_EMAIL_FIELD", "email"),
             "name": os.getenv("OKTA_NAME_FIELD", "displayName"),
             "department": os.getenv("OKTA_DEPARTMENT_FIELD", "department"),
             "job_title": os.getenv("OKTA_JOB_TITLE_FIELD", "title"),
             "supervisor_id": os.getenv("OKTA_SUPERVISOR_ID_FIELD", "managerId"),
         }
+        supervisor_match_field = (
+            os.getenv("OKTA_SUPERVISOR_MATCH_FIELD", "").strip() or field_config["external_id"]
+        )
 
         supervisor_field, supervisor_value = parse_supervisor_rule(os.getenv("OKTA_SUPERVISOR_RULE", ""))
         if supervisor_field and supervisor_value is not None:
@@ -357,6 +489,7 @@ def fetch_okta_users(debug=False):
             field_config,
             supervisor_field,
             supervisor_value,
+            supervisor_match_field,
         )
 
         if inactive_supervisors:

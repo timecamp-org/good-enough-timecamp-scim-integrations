@@ -10,6 +10,7 @@ from fetch_okta import (
     fetch_missing_supervisors,
     fetch_okta_users,
     normalize_org_url,
+    resolve_supervisor_ids,
     transform_okta_user_to_schema,
 )
 
@@ -29,11 +30,13 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("OKTA_FILTER_GROUPS", "")
     monkeypatch.setenv("OKTA_SUPERVISOR_GROUPS", "")
     monkeypatch.setenv("OKTA_EXCLUDED_DEPARTMENTS", "")
+    monkeypatch.setenv("OKTA_EXTERNAL_ID_FIELD", "id")
     monkeypatch.setenv("OKTA_EMAIL_FIELD", "email")
     monkeypatch.setenv("OKTA_NAME_FIELD", "displayName")
     monkeypatch.setenv("OKTA_DEPARTMENT_FIELD", "department")
     monkeypatch.setenv("OKTA_JOB_TITLE_FIELD", "title")
     monkeypatch.setenv("OKTA_SUPERVISOR_ID_FIELD", "managerId")
+    monkeypatch.setenv("OKTA_SUPERVISOR_MATCH_FIELD", "")
     monkeypatch.setenv("OKTA_SUPERVISOR_RULE", "")
 
 
@@ -145,6 +148,54 @@ def test_transform_okta_user_custom_fields_and_supervisor_rule():
     assert user["is_supervisor"] is True
 
 
+def test_transform_okta_user_uses_configured_profile_field_as_external_id():
+    okta_user = make_okta_user(
+        "00u1",
+        "jane@example.com",
+        manager_id="manager@example.com",
+    )
+
+    user = transform_okta_user_to_schema(
+        okta_user,
+        {
+            "external_id": "login",
+            "supervisor_id": "managerId",
+        },
+    )
+
+    assert user["external_id"] == "jane@example.com"
+    assert user["supervisor_id"] == "manager@example.com"
+
+
+def test_resolve_supervisor_id_by_email_to_manager_external_id():
+    field_config = {
+        "external_id": "employeeNumber",
+        "supervisor_id": "managerId",
+    }
+    employee = transform_okta_user_to_schema(
+        make_okta_user(
+            "00u-employee",
+            "employee@example.com",
+            manager_id="MANAGER@example.com",
+            extra_profile={"employeeNumber": "employee-100"},
+        ),
+        field_config,
+    )
+    manager = transform_okta_user_to_schema(
+        make_okta_user(
+            "00u-manager",
+            "manager@example.com",
+            extra_profile={"employeeNumber": "manager-200"},
+        ),
+        field_config,
+    )
+
+    unresolved = resolve_supervisor_ids([employee, manager], field_config, "email")
+
+    assert unresolved == set()
+    assert employee["supervisor_id"] == "manager-200"
+
+
 @patch("fetch_okta.requests.get")
 def test_paginated_get_follows_okta_link_header(mock_get):
     mock_get.side_effect = [
@@ -161,6 +212,18 @@ def test_paginated_get_follows_okta_link_header(mock_get):
     assert [user["id"] for user in users] == ["00u1", "00u2"]
     assert mock_get.call_args_list[0].kwargs["params"] == {"limit": 200}
     assert mock_get.call_args_list[1].kwargs["params"] is None
+
+
+@patch("fetch_okta.requests.get")
+def test_find_user_by_id_rejects_a_login_that_does_not_match_the_id(mock_get):
+    mock_get.return_value = mock_response(
+        make_okta_user("00u-manager", "manager@example.com")
+    )
+    client = OktaClient("https://example.okta.com", "token")
+
+    user = client.find_user_by_field("id", "manager@example.com")
+
+    assert user is None
 
 
 @patch("fetch_okta.requests.get")
@@ -239,6 +302,49 @@ def test_fetch_okta_users_filters_groups_marks_supervisors_and_fetches_missing_m
     assert users_by_id["00u1"]["supervisor_id"] == "00u-manager"
     assert users_by_id["00u-manager"]["status"] == "inactive"
     assert users_by_id["00u-manager"]["raw_data"]["id"] == "00u-manager"
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_fetch_okta_users_finds_manager_by_email_and_links_external_id(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+):
+    monkeypatch.setenv("OKTA_EXTERNAL_ID_FIELD", "employeeNumber")
+    monkeypatch.setenv("OKTA_SUPERVISOR_MATCH_FIELD", "email")
+    employee = make_okta_user(
+        "00u-employee",
+        "employee@example.com",
+        manager_id="manager@example.com",
+        extra_profile={"employeeNumber": "employee-100"},
+    )
+    manager = make_okta_user(
+        "00u-manager",
+        "manager@example.com",
+        extra_profile={"employeeNumber": "manager-200"},
+    )
+
+    def side_effect(url, **kwargs):
+        params = kwargs.get("params") or {}
+        if url.endswith("/api/v1/users") and params.get("filter") == 'status eq "ACTIVE"':
+            return mock_response([employee])
+        if url.endswith("/api/v1/users") and params.get("search") == (
+            'profile.email eq "manager@example.com"'
+        ):
+            return mock_response([manager])
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    mock_get.side_effect = side_effect
+
+    fetch_okta_users()
+
+    saved_users = mock_save.call_args[0][0]["users"]
+    users_by_id = {user["external_id"]: user for user in saved_users}
+    assert set(users_by_id) == {"employee-100", "manager-200"}
+    assert users_by_id["employee-100"]["supervisor_id"] == "manager-200"
+    assert users_by_id["manager-200"]["status"] == "inactive"
 
 
 @patch("fetch_okta.requests.get")

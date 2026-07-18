@@ -169,6 +169,8 @@ Common environment variables
   value: {{ .supervisorGroups | quote }}
 - name: OKTA_EXCLUDED_DEPARTMENTS
   value: {{ .excludedDepartments | quote }}
+- name: OKTA_EXTERNAL_ID_FIELD
+  value: {{ .externalIdField | quote }}
 - name: OKTA_EMAIL_FIELD
   value: {{ .emailField | quote }}
 - name: OKTA_NAME_FIELD
@@ -179,6 +181,8 @@ Common environment variables
   value: {{ .jobTitleField | quote }}
 - name: OKTA_SUPERVISOR_ID_FIELD
   value: {{ .supervisorIdField | quote }}
+- name: OKTA_SUPERVISOR_MATCH_FIELD
+  value: {{ .supervisorMatchField | quote }}
 - name: OKTA_SUPERVISOR_RULE
   value: {{ .supervisorRule | quote }}
 {{- end }}

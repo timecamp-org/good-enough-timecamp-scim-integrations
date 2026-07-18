@@ -216,7 +216,9 @@ config:
     orgUrl: "https://company.okta.com"
     filterGroups: "Engineering,Sales"
     supervisorGroups: "Managers,Team Leads"
+    externalIdField: "employeeNumber"
     supervisorIdField: "managerId"
+    supervisorMatchField: "email"
 
 jobs:
   fetchOkta:

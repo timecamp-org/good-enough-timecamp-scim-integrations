@@ -132,6 +132,23 @@ Common environment variables
   value: {{ .supervisorRule | quote }}
 {{- end }}
 {{- end }}
+{{- /* HiBob Configuration */ -}}
+{{- with .Values.config.hibob }}
+{{- if .serviceUserId }}
+- name: HIBOB_SERVICE_USER_ID
+  value: {{ .serviceUserId | quote }}
+{{- end }}
+- name: HIBOB_EXCLUDE_FILTER
+  value: {{ .excludeFilter | quote }}
+- name: HIBOB_EXCLUDED_DEPARTMENTS
+  value: {{ .excludedDepartments | quote }}
+{{- if .supervisorRule }}
+- name: HIBOB_SUPERVISOR_RULE
+  value: {{ .supervisorRule | quote }}
+{{- end }}
+- name: HIBOB_CUSTOM_FIELDS
+  value: {{ .customFields | quote }}
+{{- end }}
 {{- /* Azure AD Configuration */ -}}
 {{- with .Values.config.azure }}
 {{- if .tenantId }}
@@ -150,6 +167,8 @@ Common environment variables
   value: {{ .supervisorGroups | quote }}
 - name: AZURE_PREFER_REAL_EMAIL
   value: {{ .preferRealEmail | quote }}
+- name: AZURE_ADDITIONAL_EMAIL_SOURCE
+  value: {{ .additionalEmailSource | quote }}
 - name: AZURE_TOKEN_EXPIRES_AT
   value: {{ .tokenExpiresAt | quote }}
 - name: AZURE_REFRESH_TOKEN_EXPIRES_AT
@@ -274,6 +293,14 @@ Secret environment variables from External Secrets
     secretKeyRef:
       name: {{ include "timecamp-scim.fullname" . }}-secrets
       key: BAMBOOHR_API_KEY
+      optional: true
+{{- end }}
+{{- if or .Values.jobs.fetchHibob.enabled }}
+- name: HIBOB_SERVICE_USER_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "timecamp-scim.fullname" . }}-secrets
+      key: HIBOB_SERVICE_USER_TOKEN
       optional: true
 {{- end }}
 {{- if or .Values.jobs.fetchAzuread.enabled }}

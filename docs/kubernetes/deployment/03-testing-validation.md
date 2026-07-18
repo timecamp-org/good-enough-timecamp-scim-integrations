@@ -21,6 +21,9 @@ Before deploying to production, validate your environment setup:
 # Test connection to HR system (example for BambooHR)
 python fetch_bamboohr.py --dry-run --debug
 
+# Test connection to HiBob
+python fetch_hibob.py --debug
+
 # Test TimeCamp API connection
 python timecamp_sync_users.py --dry-run --debug
 
@@ -35,6 +38,8 @@ Test each stage of the data pipeline:
 ```bash
 # Stage 1: Fetch data from HR system
 python fetch_bamboohr.py --debug
+# or:
+python fetch_hibob.py --debug
 # Verify: Check var/users.json is created and contains expected data
 
 # Stage 2: Transform data
@@ -62,6 +67,10 @@ For Kubernetes deployments, test each component:
 kubectl create job test-fetch --from=cronjob/scim-fetch-bamboohr -n scim
 kubectl logs job/test-fetch -n scim -f
 
+# Test HiBob fetch job
+kubectl create job test-fetch-hibob --from=cronjob/timecamp-scim-fetch-hibob -n scim
+kubectl logs job/test-fetch-hibob -n scim -f
+
 # Test prepare job
 kubectl create job test-prepare --from=cronjob/scim-prepare -n scim
 kubectl logs job/test-prepare -n scim -f
@@ -71,7 +80,7 @@ kubectl create job test-sync --from=cronjob/scim-sync-users -n scim
 kubectl logs job/test-sync -n scim -f
 
 # Clean up test jobs
-kubectl delete job test-fetch test-prepare test-sync -n scim
+kubectl delete job test-fetch test-fetch-hibob test-prepare test-sync -n scim
 ```
 
 ## Test Scenarios

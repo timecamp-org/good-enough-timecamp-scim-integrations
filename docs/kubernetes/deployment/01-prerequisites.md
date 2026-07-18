@@ -129,6 +129,11 @@ Ensure you have access credentials for your HR system:
 - API key from BambooHR admin panel
 - Subdomain name
 
+### HiBob
+- Service user ID
+- Service user token
+- Read access to people data
+
 ### Azure AD / Entra ID
 - Tenant ID
 - Client ID and Secret
@@ -171,6 +176,7 @@ The Kubernetes cluster needs outbound access to:
 
 # HR Systems (examples)
 443/tcp -> api.bamboohr.com
+443/tcp -> api.hibob.com
 443/tcp -> graph.microsoft.com
 443/tcp -> your-okta-domain.okta.com
 389/tcp or 636/tcp -> your-ldap-server

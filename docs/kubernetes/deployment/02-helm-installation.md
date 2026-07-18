@@ -191,6 +191,25 @@ jobs:
     schedule: "0 */6 * * *"
 ```
 
+### HiBob
+
+Store `HIBOB_SERVICE_USER_TOKEN` in the chart secret source. Put non-sensitive HiBob fetch settings in values:
+
+```yaml
+config:
+  hibob:
+    serviceUserId: "your-service-user-id"
+    excludeFilter: ""
+    excludedDepartments: "Operations,Back Office"
+    supervisorRule: "work.isManager:true"
+    customFields: ""
+
+jobs:
+  fetchHibob:
+    enabled: true
+    schedule: "0 */6 * * *"
+```
+
 ### Azure AD
 
 ```yaml

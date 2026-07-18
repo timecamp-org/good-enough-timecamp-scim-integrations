@@ -1041,6 +1041,58 @@ class TestTimeCampSynchronizer:
 
         mock_timecamp_api.delete_group.assert_not_called()
 
+    def test_sync_keeps_source_required_group_when_manual_user_is_not_moved(
+        self, mock_timecamp_api, mock_timecamp_config
+    ):
+        """Do not create and then remove a group required by a protected manual user."""
+        mock_timecamp_config.remove_empty_groups = True
+        mock_timecamp_config.disable_manual_user_updates = True
+        mock_timecamp_config.root_group_id = 100
+
+        root_group = {'group_id': '100', 'name': 'Root', 'parent_id': '0'}
+        required_group = {
+            'group_id': '101',
+            'name': 'Zespół Płac',
+            'parent_id': '100',
+        }
+        manual_user = {
+            'user_id': '2001',
+            'email': 'manual@example.com',
+            'display_name': 'Manual User',
+            'group_id': '100',
+        }
+        source_users = [{
+            'timecamp_email': 'manual@example.com',
+            'timecamp_user_name': 'Manual User',
+            'timecamp_role': 'user',
+            'timecamp_status': 'active',
+            'timecamp_groups_breadcrumb': 'Zespół Płac',
+        }]
+
+        mock_timecamp_api.get_groups.side_effect = [
+            [root_group],
+            [root_group, required_group],
+        ]
+        mock_timecamp_api.get_users.side_effect = [
+            [manual_user],
+            [manual_user],
+        ]
+        mock_timecamp_api.get_user_settings_bulk.return_value = {
+            'additional_email': {2001: None},
+            'external_id': {2001: None},
+            'added_manually': {2001: '1'},
+            'disabled_user': {2001: '0'},
+        }
+        mock_timecamp_api.get_user_roles.return_value = {}
+        mock_timecamp_api.add_group.return_value = '101'
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.sync(source_users, dry_run=False)
+
+        mock_timecamp_api.add_group.assert_called_once_with('Zespół Płac', 100)
+        mock_timecamp_api.update_user.assert_not_called()
+        mock_timecamp_api.delete_group.assert_not_called()
+
     def test_remove_empty_groups_removes_nested_empty_groups(self, mock_timecamp_api, mock_timecamp_config):
         """Test that nested empty groups are removed bottom-up."""
         mock_timecamp_config.remove_empty_groups = True
@@ -1115,4 +1167,3 @@ class TestTimeCampSynchronizer:
 
         mock_timecamp_api.delete_group.assert_not_called()
         mock_sleep.assert_not_called()
-

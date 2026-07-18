@@ -45,13 +45,21 @@ config:
   # Configure based on your HR system
   bamboohr:
     subdomain: "company"
-    excludedDepartments: "Department1,Department2"  # Departments to exclude
+    excludedDepartments: "Operations,Back Office"  # Departments to exclude
+
+  hibob:
+    serviceUserId: "service-user-id"
+    excludeFilter: ""
+    excludedDepartments: "Operations,Back Office"  # Departments to exclude
+    supervisorRule: "work.isManager:true"
+    customFields: ""
   
   azure:
     tenantId: "your-tenant-id"
     clientId: "your-client-id"
     filterGroups: "Group1,Group2"  # Groups to include
     supervisorGroups: "Managers,Team Leads"  # Optional: members get TimeCamp supervisor role
+    additionalEmailSource: ""  # Optional: mail or userPrincipalName
 
   okta:
     orgUrl: "https://company.okta.com"
@@ -89,6 +97,10 @@ jobs:
   fetchBamboohr:
     enabled: true
     schedule: "0 */6 * * *"  # Every 6 hours
+
+  # fetchHibob:
+  #   enabled: true
+  #   schedule: "0 */6 * * *"
   
   # fetchAzuread:
   #   enabled: true

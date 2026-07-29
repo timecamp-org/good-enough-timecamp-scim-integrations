@@ -213,6 +213,7 @@ config:
     orgUrl: ""  # Your Okta org URL, e.g. https://company.okta.com
     userStatuses: "ACTIVE"  # Comma-separated Okta statuses to fetch
     filterGroups: ""  # Comma-separated list of exact Okta group names to include
+    filterGroupIds: ""  # Comma-separated Okta group IDs to include; combined with filterGroups
     supervisorGroups: ""  # Comma-separated list of exact Okta group names whose members become TimeCamp supervisors
     excludedDepartments: ""  # Comma-separated list
     externalIdField: "id"  # Okta profile field used as TimeCamp external ID

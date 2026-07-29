@@ -184,6 +184,8 @@ Common environment variables
   value: {{ .userStatuses | quote }}
 - name: OKTA_FILTER_GROUPS
   value: {{ .filterGroups | quote }}
+- name: OKTA_FILTER_GROUP_IDS
+  value: {{ .filterGroupIds | quote }}
 - name: OKTA_SUPERVISOR_GROUPS
   value: {{ .supervisorGroups | quote }}
 - name: OKTA_EXCLUDED_DEPARTMENTS

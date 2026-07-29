@@ -9,6 +9,7 @@ OKTA_ORG_URL=https://company.okta.com
 OKTA_API_TOKEN=your_okta_api_token
 OKTA_USER_STATUSES=ACTIVE
 OKTA_FILTER_GROUPS=TimeCamp Users
+OKTA_FILTER_GROUP_IDS=00gabc123,00gdef456
 OKTA_SUPERVISOR_GROUPS=TimeCamp Supervisors
 OKTA_EXCLUDED_DEPARTMENTS=
 OKTA_EXTERNAL_ID_FIELD=id
@@ -21,7 +22,7 @@ OKTA_SUPERVISOR_MATCH_FIELD=
 OKTA_SUPERVISOR_RULE=
 ```
 
-`OKTA_FILTER_GROUPS` and `OKTA_SUPERVISOR_GROUPS` are exact Okta group names. Filtering limits the users synced into TimeCamp. Supervisor groups set `role_id=2` for matching users.
+`OKTA_FILTER_GROUPS` contains exact Okta group names. `OKTA_FILTER_GROUP_IDS` contains Okta group IDs. Both are optional and comma-separated. When either setting is configured, the fetcher reads users directly from the matching Okta group-members endpoints instead of listing every user in the organization. When both are configured, it includes the deduplicated union of their members. `OKTA_USER_STATUSES` is then applied to those group members. `OKTA_SUPERVISOR_GROUPS` contains exact group names and sets `role_id=2` for matching users.
 
 `OKTA_EXTERNAL_ID_FIELD` selects the Okta profile field stored as the TimeCamp external ID. It defaults to Okta's top-level `id`.
 

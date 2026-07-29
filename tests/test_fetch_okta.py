@@ -28,6 +28,7 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("OKTA_API_TOKEN", "test-token")
     monkeypatch.setenv("OKTA_USER_STATUSES", "ACTIVE")
     monkeypatch.setenv("OKTA_FILTER_GROUPS", "")
+    monkeypatch.setenv("OKTA_FILTER_GROUP_IDS", "")
     monkeypatch.setenv("OKTA_SUPERVISOR_GROUPS", "")
     monkeypatch.setenv("OKTA_EXCLUDED_DEPARTMENTS", "")
     monkeypatch.setenv("OKTA_EXTERNAL_ID_FIELD", "id")
@@ -248,6 +249,60 @@ def test_collect_group_member_ids_uses_exact_group_name(mock_get):
 
 
 @patch("fetch_okta.requests.get")
+def test_collect_group_member_ids_supports_group_ids_and_unions_name_matches(mock_get):
+    def side_effect(url, **kwargs):
+        if url.endswith("/api/v1/groups"):
+            return mock_response([{"id": "00g-name", "profile": {"name": "Engineering"}}])
+        if url.endswith("/api/v1/groups/00g-name/users"):
+            return mock_response([make_okta_user("00u1", "one@example.com")])
+        if url.endswith("/api/v1/groups/00g-direct/users"):
+            return mock_response([
+                make_okta_user("00u1", "one@example.com"),
+                make_okta_user("00u2", "two@example.com"),
+            ])
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    mock_get.side_effect = side_effect
+    client = OktaClient("https://example.okta.com", "token")
+
+    result = collect_group_member_ids(
+        ["Engineering"],
+        "filter",
+        client,
+        ["00g-direct"],
+    )
+
+    assert result == {"00u1", "00u2"}
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_fetch_okta_users_fetches_group_members_without_listing_all_users(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+):
+    monkeypatch.setenv("OKTA_FILTER_GROUP_IDS", "00g-allowed")
+    group_users = [
+        make_okta_user("00u1", "included@example.com"),
+        make_okta_user("00u2", "inactive@example.com", status="SUSPENDED"),
+    ]
+
+    def side_effect(url, **kwargs):
+        if url.endswith("/api/v1/groups/00g-allowed/users"):
+            return mock_response(group_users)
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    mock_get.side_effect = side_effect
+
+    fetch_okta_users()
+
+    saved_users = mock_save.call_args[0][0]["users"]
+    assert [user["external_id"] for user in saved_users] == ["00u1"]
+
+
+@patch("fetch_okta.requests.get")
 @patch("common.storage.save_json_file")
 def test_fetch_okta_users_filters_groups_marks_supervisors_and_fetches_missing_manager(
     mock_save,
@@ -258,10 +313,6 @@ def test_fetch_okta_users_filters_groups_marks_supervisors_and_fetches_missing_m
     monkeypatch.setenv("OKTA_FILTER_GROUPS", "TimeCamp Users")
     monkeypatch.setenv("OKTA_SUPERVISOR_GROUPS", "TimeCamp Supervisors")
 
-    active_users = [
-        make_okta_user("00u1", "user@example.com", display_name="User One", manager_id="00u-manager"),
-        make_okta_user("00u2", "outsider@example.com", display_name="Out Sider"),
-    ]
     manager = make_okta_user("00u-manager", "manager@example.com", display_name="Manager One")
 
     def side_effect(url, **kwargs):
@@ -275,15 +326,16 @@ def test_fetch_okta_users_filters_groups_marks_supervisors_and_fetches_missing_m
 
         if url.endswith("/api/v1/groups/group-users/users"):
             return mock_response([
-                make_okta_user("00u1", "user@example.com"),
-                make_okta_user("00u-manager", "manager@example.com"),
+                make_okta_user(
+                    "00u1",
+                    "user@example.com",
+                    display_name="User One",
+                    manager_id="00u-manager",
+                ),
             ])
 
         if url.endswith("/api/v1/groups/group-supervisors/users"):
             return mock_response([make_okta_user("00u1", "user@example.com")])
-
-        if url.endswith("/api/v1/users") and params.get("filter") == 'status eq "ACTIVE"':
-            return mock_response(active_users)
 
         if url.endswith("/api/v1/users/00u-manager"):
             return mock_response(manager)

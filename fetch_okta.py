@@ -313,30 +313,65 @@ class OktaClient:
         return self.paginated_get(f"/api/v1/groups/{encoded_group_id}/users", params={"limit": 200})
 
 
-def collect_group_member_ids(group_names, group_purpose, client):
-    """Collect unique Okta user IDs from groups identified by exact profile.name."""
-    if not group_names:
-        return set()
+def resolve_group_ids(group_names, group_purpose, client, group_ids=None):
+    """Resolve configured Okta group names and IDs to unique group IDs."""
+    group_ids = group_ids or []
+    if not group_names and not group_ids:
+        return []
 
-    member_ids = set()
-    get_logger().info(f"Resolving Okta {group_purpose} groups: {group_names}")
+    resolved_group_ids = []
 
-    for group_name in group_names:
-        group = client.find_group_by_name(group_name)
-        if not group:
-            continue
+    if group_names:
+        get_logger().info(f"Resolving Okta {group_purpose} groups by name: {group_names}")
+        for group_name in group_names:
+            group = client.find_group_by_name(group_name)
+            if not group:
+                continue
 
-        group_id = group.get("id")
-        group_members = client.list_group_users(group_id)
-        for user in group_members:
+            group_id = group.get("id")
+            if group_id:
+                resolved_group_ids.append(group_id)
+
+    if group_ids:
+        get_logger().info(f"Resolving Okta {group_purpose} groups by ID: {group_ids}")
+        resolved_group_ids.extend(group_ids)
+
+    return list(dict.fromkeys(resolved_group_ids))
+
+
+def collect_group_users(group_names, group_purpose, client, group_ids=None):
+    """Fetch unique Okta users directly from groups identified by name or ID."""
+    users_by_id = {}
+    resolved_group_ids = resolve_group_ids(
+        group_names,
+        group_purpose,
+        client,
+        group_ids,
+    )
+
+    for group_id in resolved_group_ids:
+        for user in client.list_group_users(group_id):
             user_id = user.get("id")
             if user_id:
-                member_ids.add(user_id)
+                users_by_id[user_id] = user
 
-    if not member_ids:
+    if resolved_group_ids and not users_by_id:
         get_logger().warning(f"No users found in the specified Okta {group_purpose} groups.")
 
-    return member_ids
+    return list(users_by_id.values())
+
+
+def collect_group_member_ids(group_names, group_purpose, client, group_ids=None):
+    """Collect unique Okta user IDs from groups identified by name or ID."""
+    return {
+        user["id"]
+        for user in collect_group_users(
+            group_names,
+            group_purpose,
+            client,
+            group_ids,
+        )
+    }
 
 
 def fetch_missing_supervisors(
@@ -434,8 +469,12 @@ def fetch_okta_users(debug=False):
         if not all([org_url, api_token]):
             raise ValueError("Missing required environment variables: OKTA_ORG_URL and OKTA_API_TOKEN")
 
-        statuses = [status.upper() for status in parse_csv(os.getenv("OKTA_USER_STATUSES", "ACTIVE"))]
+        statuses = [
+            status.upper()
+            for status in parse_csv(os.getenv("OKTA_USER_STATUSES", "ACTIVE"))
+        ] or ["ACTIVE"]
         filter_groups = parse_csv(os.getenv("OKTA_FILTER_GROUPS", ""))
+        filter_group_ids = parse_csv(os.getenv("OKTA_FILTER_GROUP_IDS", ""))
         supervisor_groups = parse_csv(os.getenv("OKTA_SUPERVISOR_GROUPS", ""))
         excluded_departments = set(parse_csv(os.getenv("OKTA_EXCLUDED_DEPARTMENTS", "")))
 
@@ -457,15 +496,27 @@ def fetch_okta_users(debug=False):
 
         client = OktaClient(org_url, api_token)
 
-        filtered_user_ids = collect_group_member_ids(filter_groups, "filter", client)
         supervisor_user_ids = collect_group_member_ids(supervisor_groups, "supervisor", client)
 
         users = []
-        logger.info("Fetching users from Okta...")
+        if filter_groups or filter_group_ids:
+            logger.info("Fetching users directly from configured Okta filter groups...")
+            okta_users = collect_group_users(
+                filter_groups,
+                "filter",
+                client,
+                filter_group_ids,
+            )
+        else:
+            logger.info("Fetching users from Okta...")
+            okta_users = client.list_users(statuses)
 
-        for okta_user in client.list_users(statuses):
+        allowed_statuses = set(statuses)
+
+        for okta_user in okta_users:
             user_id = okta_user.get("id")
-            if filter_groups and user_id not in filtered_user_ids:
+            user_status = str(okta_user.get("status") or "").upper()
+            if user_status not in allowed_statuses:
                 continue
 
             user = transform_okta_user_to_schema(okta_user, field_config, supervisor_field, supervisor_value)

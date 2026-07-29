@@ -234,6 +234,7 @@ config:
   okta:
     orgUrl: "https://company.okta.com"
     filterGroups: "Engineering,Sales"
+    filterGroupIds: "00gabc123,00gdef456"
     supervisorGroups: "Managers,Team Leads"
     externalIdField: "employeeNumber"
     supervisorIdField: "managerId"

@@ -64,6 +64,7 @@ config:
   okta:
     orgUrl: "https://company.okta.com"
     filterGroups: "TimeCamp Users"  # Optional: exact Okta group names to include
+    filterGroupIds: "00gabc123,00gdef456"  # Optional: Okta group IDs; combined with filterGroups
     supervisorGroups: "TimeCamp Supervisors"  # Optional: members get TimeCamp supervisor role
     externalIdField: "employeeNumber"  # Okta field stored as the TimeCamp external ID
     supervisorIdField: "managerId"  # Okta profile field containing manager user ID/login

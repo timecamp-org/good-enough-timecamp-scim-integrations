@@ -1,208 +1,37 @@
-# Helm Installation Guide
+# Install the Helm chart
 
-This guide walks you through installing the TimeCamp SCIM integration using Helm.
+This guide installs the chart directly with Helm. If Flux owns the release,
+commit the same values under `spec.values` in the `HelmRelease` instead of
+running `helm upgrade`.
 
-## Prerequisites
+## 1. Prepare values
 
-Before starting, ensure you have completed:
-1. [Prerequisites](01-prerequisites.md) - System requirements
-2. [Cluster Requirements](../kubernetes/cluster-requirements.md) - Kubernetes cluster setup
-3. [Secret Store Setup](../secret-stores/) - Choose and configure a secret provider
-
-## Installation Steps
-
-### Step 1: Prepare Configuration
-
-1. **Copy the values template**:
-   ```bash
-   cp helm/scim/samples/values-example.yaml my-values.yaml
-   ```
-
-2. **Edit configuration** (`my-values.yaml`):
-   ```yaml
-   image:
-     registry: your-region-docker.pkg.dev
-     repository: your-project-id/scim-integration-repo/scim-integration
-     tag: "latest"
-
-   serviceAccount:
-     annotations:
-       iam.gke.io/gcp-service-account: "scim-sa@your-project-id.iam.gserviceaccount.com"
-
-   externalSecrets:
-     secretStore:
-       projectID: "your-project-id"
-       auth:
-         workloadIdentity:
-           clusterLocation: your-region
-           clusterName: your-cluster-name
-
-   s3:
-     enabled: true
-     endpointUrl: "http://s3.example.local:9000"
-     region: "your-region"
-     bucketName: "scim-data"
-     forcePathStyle: true
-
-   config:
-     timecamp:
-       domain: "app.timecamp.com"
-       rootGroupId: "00000"
-       
-     # Enable based on your HR system
-     bamboohr:
-       subdomain: "your-company"
-       
-   jobs:
-     fetchBamboohr:
-       enabled: true
-       schedule: "0 */6 * * *"
-     
-     prepareTimecamp:
-       enabled: true
-       schedule: "30 */6 * * *"
-     
-     syncUsers:
-       enabled: true
-       schedule: "0 1,7,13,19 * * *"
-   ```
-
-### Step 2: Create Namespace
+Copy the example:
 
 ```bash
-kubectl create namespace scim
+cp helm/timecamp-scim/samples/values-example.yaml my-values.yaml
 ```
 
-### Step 3: Install External Secrets (if not done)
+Edit these sections:
 
-```bash
-helm repo add external-secrets https://charts.external-secrets.io
-helm repo update
+- `image`: the complete image repository and immutable tag.
+- `config.timecamp`: TimeCamp behavior.
+- One provider under `config`, such as `config.okta`.
+- `jobs`: one fetch job, followed by prepare and sync jobs.
+- `s3`: shared storage used by all three jobs.
+- `externalSecrets`: the secret backend, if enabled.
 
-helm install external-secrets external-secrets/external-secrets \
-  -n external-secrets-system \
-  --create-namespace
-```
+The complete rules and examples are in
+[Kubernetes configuration](../configuration.md).
 
-### Step 4: Deploy the Helm Chart
-
-```bash
-helm install scim-integration ./helm/scim \
-  --namespace scim \
-  --values my-values.yaml
-```
-
-### Step 5: Verify Installation
-
-1. **Check pod status**:
-   ```bash
-   kubectl get pods -n scim
-   ```
-
-2. **Check External Secrets**:
-   ```bash
-   kubectl get externalsecrets -n scim
-   kubectl get secretstore -n scim
-   ```
-
-3. **Check CronJobs**:
-   ```bash
-   kubectl get cronjobs -n scim
-   ```
-
-4. **Verify secrets are synced**:
-   ```bash
-   kubectl get secrets -n scim
-   kubectl describe secret scim-integration-secrets -n scim
-   ```
-
-## Configuration Options
-
-### Image Configuration
-
-```yaml
-image:
-  registry: your-registry.com
-  repository: timecamp-org/scim-integration
-  tag: "v1.0.0"
-  pullPolicy: IfNotPresent
-```
-
-### Job Scheduling
-
-```yaml
-jobs:
-  # Fetch from HR system every 6 hours
-  fetchBamboohr:
-    enabled: true
-    schedule: "0 */6 * * *"
-    successfulJobsHistoryLimit: 3
-    failedJobsHistoryLimit: 3
-  
-  # Prepare data 30 minutes after fetch
-  prepareTimecamp:
-    enabled: true
-    schedule: "30 */6 * * *"
-  
-  # Sync to TimeCamp 4 times daily
-  syncUsers:
-    enabled: true
-    schedule: "0 1,7,13,19 * * *"
-```
-
-### Resource Limits
-
-```yaml
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-```
-
-### S3 Storage Options
-
-```yaml
-s3:
-  enabled: true
-  endpointUrl: "https://s3.amazonaws.com"  # or MinIO endpoint
-  region: "us-east-1"
-  bucketName: "my-scim-data"
-  pathPrefix: "production/"  # optional
-  forcePathStyle: false  # true for MinIO
-```
-
-## HR System Configuration
-
-### BambooHR
-
-```yaml
-config:
-  bamboohr:
-    subdomain: "your-company"
-    excludeFilter: ""
-    excludedDepartments: "IT,HR"
-
-jobs:
-  fetchBamboohr:
-    enabled: true
-    schedule: "0 */6 * * *"
-```
-
-### HiBob
-
-Store `HIBOB_SERVICE_USER_TOKEN` in the chart secret source. Put non-sensitive HiBob fetch settings in values:
+For example, a HiBob fetch uses non-secret values under `config.hibob` and
+enables its matching job:
 
 ```yaml
 config:
   hibob:
-    serviceUserId: "your-service-user-id"
-    excludeFilter: ""
-    excludedDepartments: "Operations,Back Office"
-    supervisorRule: "work.isManager:true"
-    customFields: ""
+    serviceUserId: "service-user-id"
+    excludedDepartments: "Contractors"
 
 jobs:
   fetchHibob:
@@ -210,214 +39,192 @@ jobs:
     schedule: "0 */6 * * *"
 ```
 
-### Azure AD
+Store `HIBOB_SERVICE_USER_TOKEN` in the release Secret, not in this values
+file.
+
+## 2. Configure secrets
+
+Do not commit API tokens or passwords to `my-values.yaml`. The chart expects
+secret keys such as `TIMECAMP_API_KEY` and the selected provider's token in the
+release Secret.
+
+The default chart configuration uses External Secrets. Configure its backend
+before installing the chart. For Google Secret Manager, see
+[Google Secret Manager](../secret-stores/google-secret-manager.md).
+
+If another system manages the Kubernetes Secret, disable the chart-managed
+ExternalSecret:
 
 ```yaml
-config:
-  azure:
-    tenantId: "your-tenant-id"
-    clientId: "your-client-id"
-    scimEndpoint: "https://graph.microsoft.com/v1.0"
-    filterGroups: "Engineering,Sales"
-    preferRealEmail: false
-
-jobs:
-  fetchAzuread:
-    enabled: true
-    schedule: "0 */6 * * *"
+externalSecrets:
+  enabled: false
 ```
 
-### Okta
+The managed Secret must use the chart fullname plus `-secrets`. With the
+commands in this guide, its name is `timecamp-scim-secrets`. Confirm the exact
+name in the rendered manifest and include the required keys.
+
+## 3. Validate before applying
+
+```bash
+helm lint ./helm/timecamp-scim -f my-values.yaml
+helm template timecamp-scim ./helm/timecamp-scim \
+  --namespace timecamp-scim \
+  -f my-values.yaml > rendered.yaml
+```
+
+Inspect `rendered.yaml`. Confirm:
+
+- The expected image tag is used.
+- Exactly one provider fetch CronJob is enabled.
+- Fetch, prepare, and sync schedules run in that order.
+- Provider filters appear in the fetch CronJob.
+- `TIMECAMP_ROOT_GROUP_ID` appears in the sync CronJob.
+- Secret values are references, not plaintext.
+
+Do not deploy until the rendered manifest is correct. A value present in the
+Helm file but absent from the rendered CronJob cannot reach the Python script.
+
+## 4. Install or upgrade
+
+```bash
+helm upgrade --install timecamp-scim ./helm/timecamp-scim \
+  --namespace timecamp-scim \
+  --create-namespace \
+  -f my-values.yaml
+```
+
+Use immutable image tags, preferably a Git SHA. Avoid `latest`; Kubernetes may
+keep an older cached image and makes rollback state unclear.
+
+## 5. Verify Kubernetes resources
+
+```bash
+helm status timecamp-scim -n timecamp-scim
+kubectl get cronjobs -n timecamp-scim
+kubectl get externalsecrets -n timecamp-scim
+kubectl get secretstores -n timecamp-scim
+```
+
+Inspect the actual configuration rendered into a CronJob:
+
+```bash
+kubectl get cronjob timecamp-scim-fetch-okta \
+  -n timecamp-scim \
+  -o yaml
+
+kubectl get cronjob timecamp-scim-sync-users \
+  -n timecamp-scim \
+  -o yaml
+```
+
+## 6. Run one pipeline manually
+
+Create new Jobs from the CronJobs:
+
+```bash
+kubectl create job manual-fetch \
+  --from=cronjob/timecamp-scim-fetch-okta \
+  -n timecamp-scim
+
+kubectl create job manual-prepare \
+  --from=cronjob/timecamp-scim-prepare-timecamp \
+  -n timecamp-scim
+
+kubectl create job manual-sync \
+  --from=cronjob/timecamp-scim-sync-users \
+  -n timecamp-scim
+```
+
+Run them in order. Wait for each stage to complete before starting the next:
+
+```bash
+kubectl logs -f job/manual-fetch -n timecamp-scim
+kubectl logs -f job/manual-prepare -n timecamp-scim
+kubectl logs -f job/manual-sync -n timecamp-scim
+```
+
+The sync stage changes TimeCamp data. Validate the fetched and prepared output
+before running it against a production account.
+
+Remove the manual Jobs when finished:
+
+```bash
+kubectl delete job manual-fetch manual-prepare manual-sync \
+  -n timecamp-scim
+```
+
+## Flux
+
+Flux passes `spec.values` directly to the chart. The correct nesting is:
 
 ```yaml
-config:
-  okta:
-    orgUrl: "https://company.okta.com"
-    filterGroups: "Engineering,Sales"
-    filterGroupIds: "00gabc123,00gdef456"
-    supervisorGroups: "Managers,Team Leads"
-    externalIdField: "employeeNumber"
-    supervisorIdField: "managerId"
-    supervisorMatchField: "email"
-
-jobs:
-  fetchOkta:
-    enabled: true
-    schedule: "0 */6 * * *"
+spec:
+  values:
+    config:
+      okta:
+        filterGroupIds: "00gabc123"
+      timecamp:
+        rootGroupId: "123456"
 ```
 
-### LDAP
-
-```yaml
-config:
-  ldap:
-    host: "ldap.company.local"
-    port: 389
-    domain: "company.local"
-    dn: "CN=Users,DC=company,DC=local"
-    username: "ldap-service"
-    filter: "(objectClass=user)"
-    emailDomain: "company.local"
-    useSsl: false
-    useStartTls: true
-
-jobs:
-  fetchLdap:
-    enabled: true
-    schedule: "0 */6 * * *"
-```
-
-### FactorialHR
-
-```yaml
-config:
-  factorial:
-    apiUrl: "https://api.factorialhr.com/api/v1"
-    leaveTypeMap: '{"vacation": "Vacation", "sick": "Sick Leave"}'
-
-jobs:
-  fetchFactorial:
-    enabled: true
-    schedule: "0 */6 * * *"
-  
-  syncTimeOff:
-    enabled: true
-    schedule: "0 8 * * *"  # Daily at 8 AM
-```
-
-## Manual Operations
-
-### Run Manual Sync
+After committing a change:
 
 ```bash
-# Manual fetch from HR system
-kubectl create job --from=cronjob/scim-integration-fetch-bamboohr manual-fetch -n scim
-
-# Manual prepare
-kubectl create job --from=cronjob/scim-integration-prepare-timecamp manual-prepare -n scim
-
-# Manual sync to TimeCamp
-kubectl create job --from=cronjob/scim-integration-sync-users manual-sync -n scim
+flux reconcile helmrelease timecamp-scim \
+  --namespace timecamp-scim \
+  --with-source
+kubectl get cronjob timecamp-scim-fetch-okta \
+  -n timecamp-scim \
+  -o yaml
 ```
 
-### Check Job Logs
-
-```bash
-# View job status
-kubectl get jobs -n scim
-
-# View job logs
-kubectl logs job/manual-fetch -n scim
-
-# Follow live logs
-kubectl logs -f job/manual-sync -n scim
-```
-
-### Debug Mode
-
-Run jobs with debug logging:
-
-```bash
-kubectl create job manual-debug --image=your-registry/scim-integration:latest -n scim -- \
-  python fetch_bamboohr.py --debug
-```
-
-## Upgrades
-
-### Upgrade Chart
-
-```bash
-# Update values if needed
-helm upgrade scim-integration ./helm/scim \
-  --namespace scim \
-  --values my-values.yaml
-```
-
-### Update Image Version
-
-```bash
-helm upgrade scim-integration ./helm/scim \
-  --namespace scim \
-  --values my-values.yaml \
-  --set image.tag=v2.0.0
-```
+Existing Jobs are not updated when a CronJob changes. Create a new Job or wait
+for the next schedule before checking the new configuration.
 
 ## Troubleshooting
 
-### Common Issues
+### A required variable is reported missing
 
-1. **External Secrets not syncing**:
-   ```bash
-   kubectl describe externalsecret scim-integration-secrets -n scim
-   kubectl logs -n external-secrets-system deployment/external-secrets
-   ```
-
-2. **Jobs failing**:
-   ```bash
-   kubectl describe job <job-name> -n scim
-   kubectl logs job/<job-name> -n scim
-   ```
-
-3. **S3 connection issues**:
-   ```bash
-   # Test S3 connectivity
-   kubectl run s3-test --image=amazon/aws-cli --rm -it -- \
-     aws s3 ls s3://your-bucket --endpoint-url=http://your-s3-endpoint
-   ```
-
-4. **Secret access issues**:
-   ```bash
-   kubectl get secrets -n scim
-   kubectl describe secret scim-integration-secrets -n scim
-   ```
-
-### Debug Pod
-
-Create a debug pod to test configuration:
+Inspect the rendered CronJob, not only the Helm values file:
 
 ```bash
-kubectl run debug-pod --image=your-registry/scim-integration:latest \
-  --rm -it --restart=Never -n scim -- /bin/bash
+kubectl get cronjob timecamp-scim-sync-users \
+  -n timecamp-scim \
+  -o yaml
 ```
 
-## Security Considerations
+If the variable is absent, correct the values nesting and reconcile the
+release. Use `config.timecamp` and the selected provider's `config` section.
+Do not use `config.env` or `.env`-style `KEY=value` lines.
 
-### RBAC
+### A job is using an old image
 
-The chart creates minimal RBAC permissions:
-- ServiceAccount for the integration
-- ClusterRole for External Secrets access
-- RoleBinding for secret access
+Check the CronJob and Job separately:
 
-### Network Policies
+```bash
+kubectl get cronjob timecamp-scim-fetch-okta \
+  -n timecamp-scim \
+  -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}'
 
-Consider implementing network policies:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: scim-integration-netpol
-  namespace: scim
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: scim
-  policyTypes:
-  - Egress
-  egress:
-  - to: []  # Allow all egress (customize as needed)
-    ports:
-    - protocol: TCP
-      port: 443
-    - protocol: TCP
-      port: 80
+kubectl get job manual-fetch \
+  -n timecamp-scim \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```
 
-## Next Steps
+Delete and recreate only the manual Job after confirming the CronJob contains
+the correct immutable tag.
 
-After successful installation:
-1. [Configure monitoring](04-monitoring.md)
-2. Set up log aggregation
-3. Implement backup strategies
-4. Plan for disaster recovery
+### External Secrets are not ready
+
+```bash
+kubectl describe externalsecret \
+  timecamp-scim-secrets \
+  -n timecamp-scim
+kubectl describe secretstore \
+  timecamp-scim-gcpsm \
+  -n timecamp-scim
+```
+
+Fix the provider authentication or missing remote secret properties before
+running jobs.

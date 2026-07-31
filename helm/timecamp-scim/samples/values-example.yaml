@@ -2,8 +2,7 @@
 # Copy this file and customize for your environment
 
 image:
-  registry: your-region-docker.pkg.dev
-  repository: your-project-id/your-repository/scim-integration
+  repository: your-region-docker.pkg.dev/your-project-id/your-repository/scim-integration
   tag: "latest"
 
 serviceAccount:
@@ -40,7 +39,13 @@ config:
     prepareTransformConfig: ""  # Optional: JSON string or path to transform config
     disableNewUsers: false  # Set to true to prevent new user creation
     disableUserDeactivation: false  # Set to true to avoid disabling users
+    disableGroupUpdates: false
+    disableRoleUpdates: false
+    disableGroupsCreation: false
     updateEmailOnExternalId: false  # Set to true to update email when matched by external ID
+    replaceEmailDomain: ""
+    disabledUsersGroupId: 0  # Set a TimeCamp group ID to move disabled users there
+    syncPersistentSettings: false
 
   # Configure based on your HR system
   bamboohr:

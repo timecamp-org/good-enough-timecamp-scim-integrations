@@ -100,10 +100,18 @@ Common environment variables
   value: {{ .disableManualUserUpdates | quote }}
 - name: TIMECAMP_DISABLE_USER_DEACTIVATION
   value: {{ .disableUserDeactivation | quote }}
+- name: TIMECAMP_DISABLE_GROUP_UPDATES
+  value: {{ .disableGroupUpdates | quote }}
+- name: TIMECAMP_DISABLE_ROLE_UPDATES
+  value: {{ .disableRoleUpdates | quote }}
+- name: TIMECAMP_DISABLE_GROUPS_CREATION
+  value: {{ .disableGroupsCreation | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME_USERS
   value: {{ .useJobTitleNameUsers | quote }}
 - name: TIMECAMP_USE_JOB_TITLE_NAME_GROUPS
   value: {{ .useJobTitleNameGroups | quote }}
+- name: TIMECAMP_REPLACE_EMAIL_DOMAIN
+  value: {{ .replaceEmailDomain | quote }}
 - name: TIMECAMP_EXCLUDE_REGEX
   value: {{ .excludeRegex | quote }}
 - name: TIMECAMP_CHANGE_GROUPS_REGEX
@@ -116,6 +124,10 @@ Common environment variables
   value: {{ .sslVerify | quote }}
 - name: TIMECAMP_USE_IS_SUPERVISOR_ROLE
   value: {{ .useIsSupervisorRole | quote }}
+- name: TIMECAMP_DISABLED_USERS_GROUP_ID
+  value: {{ .disabledUsersGroupId | quote }}
+- name: TIMECAMP_SYNC_PERSISTENT_SETTINGS
+  value: {{ .syncPersistentSettings | quote }}
 {{- end }}
 {{- /* BambooHR Configuration */ -}}
 {{- with .Values.config.bamboohr }}

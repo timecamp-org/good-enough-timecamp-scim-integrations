@@ -44,6 +44,27 @@ When `OKTA_SUPERVISOR_MATCH_FIELD` is empty, it defaults to `OKTA_EXTERNAL_ID_FI
 OKTA_SUPERVISOR_RULE=timecampSupervisor:yes
 ```
 
+### Kubernetes
+
+Use `config.okta` in Helm values instead of copying the environment-variable
+names:
+
+```yaml
+config:
+  okta:
+    orgUrl: "https://example.okta.com"
+    userStatuses: "ACTIVE"
+    filterGroups: ""
+    filterGroupIds: "00gabc123,00gdef456"
+    externalIdField: "employeeNumber"
+    supervisorIdField: "managerEmail"
+    supervisorMatchField: "email"
+```
+
+Store `OKTA_API_TOKEN` in the Kubernetes Secret. Do not put it in Helm values.
+See the complete [Kubernetes configuration guide](kubernetes/configuration.md)
+for Flux nesting, TimeCamp settings, validation, and invalid examples.
+
 ## Run
 
 ```sh

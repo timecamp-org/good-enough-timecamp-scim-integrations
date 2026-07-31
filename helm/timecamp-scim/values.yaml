@@ -171,6 +171,9 @@ config:
     updateEmailOnExternalId: false
     disableManualUserUpdates: false
     disableUserDeactivation: false
+    disableGroupUpdates: false
+    disableRoleUpdates: false
+    disableGroupsCreation: false
     useJobTitleNameUsers: false
     useJobTitleNameGroups: false
     replaceEmailDomain: ""  # Optional: replace email domain (e.g., "@test-timecamp.com")
@@ -180,6 +183,8 @@ config:
     removeEmptyGroups: false  # Remove empty groups (no users, no non-empty subgroups) after sync
     sslVerify: false
     useIsSupervisorRole: false  # Use is_supervisor boolean field to determine supervisor role
+    disabledUsersGroupId: 0  # Optional: move disabled users to this TimeCamp group ID; 0 disables it
+    syncPersistentSettings: false  # Persist selected TimeCamp settings between sync runs
   
   # BambooHR Configuration
   bamboohr:
@@ -252,7 +257,8 @@ config:
     apiUrl: "https://api.factorialhr.com/api/v1"
     leaveTypeMap: "{}"  # JSON string mapping leave types
 
-# Environment variables - system settings
+# Raw environment variables for system settings only. Use config.* above for
+# integration settings. This must be a YAML map, never KEY=value lines.
 env:
   PYTHONUNBUFFERED: "1"
   DISABLE_FILE_LOGGING: "true"

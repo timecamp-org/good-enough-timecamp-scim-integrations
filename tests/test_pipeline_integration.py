@@ -87,6 +87,56 @@ class TestPipelineBasicConfigurations:
                 assert emp is not None
                 # Employee should be under manager's group
                 assert 'Manager' in emp['timecamp_groups_breadcrumb']
+
+    def test_self_managed_root_preserves_full_supervisor_hierarchy(self):
+        """A self-managed root must not flatten all downstream groups."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'root-1',
+                    'name': 'Root Supervisor',
+                    'email': 'root@test.com',
+                    'department': '',
+                    'job_title': 'Director',
+                    'status': 'active',
+                    'supervisor_id': 'root-1',
+                },
+                {
+                    'external_id': 'mgr-1',
+                    'name': 'Manager',
+                    'email': 'manager@test.com',
+                    'department': '',
+                    'job_title': 'Manager',
+                    'status': 'active',
+                    'supervisor_id': 'root-1',
+                },
+                {
+                    'external_id': 'emp-1',
+                    'name': 'Employee',
+                    'email': 'employee@test.com',
+                    'department': '',
+                    'job_title': 'Developer',
+                    'status': 'active',
+                    'supervisor_id': 'mgr-1',
+                },
+            ]
+        }
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_USE_SUPERVISOR_GROUPS': 'true',
+            'TIMECAMP_USE_DEPARTMENT_GROUPS': 'false',
+        }
+
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                result = prepare_timecamp_users(source_data, config)
+
+        users_by_id = {user['timecamp_external_id']: user for user in result}
+        assert users_by_id['root-1']['timecamp_groups_breadcrumb'] == 'Root Supervisor'
+        assert users_by_id['mgr-1']['timecamp_groups_breadcrumb'] == 'Root Supervisor/Manager'
+        assert users_by_id['emp-1']['timecamp_groups_breadcrumb'] == 'Root Supervisor/Manager'
     
     def test_hybrid_mode_output(self):
         """Test output with hybrid mode (department + supervisor)."""
@@ -754,4 +804,3 @@ class TestPipelineComplexScenarios:
                 for user in result:
                     for field in required_fields:
                         assert field in user, f"Missing field {field} in user {user.get('timecamp_email')}"
-

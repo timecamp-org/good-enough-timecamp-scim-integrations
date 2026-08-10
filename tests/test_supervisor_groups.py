@@ -270,6 +270,62 @@ class TestBuildSupervisorPaths:
         # Should treat as top-level since supervisor not in dataset
         assert paths['mgr-1'] == 'Manager'
 
+    def test_build_paths_treats_self_managed_user_as_root(self, mock_timecamp_config):
+        """A self-managed top supervisor should anchor the hierarchy."""
+        source_data = {'users': []}
+        users_by_id = {
+            'root-1': {
+                'name': 'Root Supervisor',
+                'supervisor_id': 'root-1',
+                'job_title': 'Director',
+            },
+            'mgr-1': {
+                'name': 'Manager',
+                'supervisor_id': 'root-1',
+                'job_title': 'Manager',
+            },
+        }
+        supervisor_ids = {'root-1', 'mgr-1'}
+
+        paths = build_supervisor_paths(
+            source_data,
+            users_by_id,
+            supervisor_ids,
+            mock_timecamp_config,
+        )
+
+        assert paths['root-1'] == 'Root Supervisor'
+        assert paths['mgr-1'] == 'Root Supervisor/Manager'
+
+    def test_build_paths_rejects_multi_user_cycle(self, mock_timecamp_config):
+        """A hierarchy cycle must fail loudly instead of flattening groups."""
+        source_data = {'users': []}
+        users_by_id = {
+            'dir-1': {
+                'name': 'Director',
+                'supervisor_id': 'mgr-1',
+                'job_title': 'Director',
+            },
+            'mgr-1': {
+                'name': 'Manager',
+                'supervisor_id': 'dir-1',
+                'job_title': 'Manager',
+            },
+        }
+        supervisor_ids = {'dir-1', 'mgr-1'}
+
+        with pytest.raises(ValueError) as error:
+            build_supervisor_paths(
+                source_data,
+                users_by_id,
+                supervisor_ids,
+                mock_timecamp_config,
+            )
+
+        assert 'Cycle in supervisor hierarchy' in str(error.value)
+        assert 'Director (dir-1)' in str(error.value)
+        assert 'Manager (mgr-1)' in str(error.value)
+
 
 class TestAssignDepartmentsSupervisor:
     """Tests for assigning departments based on supervisor hierarchy."""
@@ -579,4 +635,3 @@ class TestProcessSourceData:
         # User name should include job title
         assert 'Senior Developer' in user['name']
         assert '[John Doe]' in user['name']
-

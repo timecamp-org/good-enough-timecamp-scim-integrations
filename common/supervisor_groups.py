@@ -86,40 +86,58 @@ def build_supervisor_paths(source_data: Dict[str, Any],
                         users_by_id: Dict[str, Dict[str, Any]], 
                         supervisor_ids: Set[str],
                         config) -> Dict[str, str]:
-    """Second pass: build paths for supervisors (top-down approach)."""
+    """Build supervisor paths, accepting self-managed roots and rejecting cycles."""
     supervisor_paths = {}
-    
-    # First handle top-level supervisors (those with no supervisor OR supervisor not present in dataset)
-    for user_id, user in users_by_id.items():
-        if user_id not in supervisor_ids:
+
+    # Resolve every path independently so a bad component cannot silently leave
+    # the whole connected hierarchy unresolved and trigger direct-manager fallbacks.
+    for starting_user_id in sorted(supervisor_ids):
+        if starting_user_id not in users_by_id or starting_user_id in supervisor_paths:
             continue
-        
-        parent_id = user.get('supervisor_id')
-        has_parent_value = parent_id and str(parent_id).strip()
-        parent_exists_in_data = has_parent_value and parent_id in users_by_id
-        
-        if not has_parent_value or not parent_exists_in_data:
-            # Treat as top-level when no parent or parent not present in dataset
-            supervisor_paths[user_id] = format_supervisor_name_for_group(user, config)
-    
-    # Then handle supervisors with supervisors
-    more_to_process = True
-    while more_to_process:
-        more_to_process = False
-        for user_id, user in users_by_id.items():
-            if user_id not in supervisor_ids or user_id in supervisor_paths:
-                continue
-                
-            supervisor_id = user.get('supervisor_id')
-            if not supervisor_id or not str(supervisor_id).strip():
-                continue
-                
-            if supervisor_id in supervisor_paths:
-                # Supervisor's supervisor is already processed, add this one
-                supervisor_path = supervisor_paths[supervisor_id]
-                supervisor_name = format_supervisor_name_for_group(user, config)
-                supervisor_paths[user_id] = f"{supervisor_path}/{supervisor_name}"
-                more_to_process = True
+
+        chain = []
+        positions_in_chain = {}
+        current_user_id = starting_user_id
+        parent_path = ""
+
+        while current_user_id in users_by_id:
+            if current_user_id in supervisor_paths:
+                parent_path = supervisor_paths[current_user_id]
+                break
+
+            if current_user_id in positions_in_chain:
+                cycle_start = positions_in_chain[current_user_id]
+                cycle_ids = chain[cycle_start:] + [current_user_id]
+                cycle = " -> ".join(
+                    f"{users_by_id[user_id].get('name', '(unnamed)')} ({user_id})"
+                    for user_id in cycle_ids
+                )
+                raise ValueError(f"Cycle in supervisor hierarchy: {cycle}")
+
+            positions_in_chain[current_user_id] = len(chain)
+            chain.append(current_user_id)
+
+            current_user = users_by_id[current_user_id]
+            supervisor_id = str(current_user.get('supervisor_id') or '').strip()
+
+            if supervisor_id == current_user_id:
+                logger.warning(
+                    "Treating self-managed user %s (%s) as a top-level supervisor",
+                    current_user.get('name', '(unnamed)'),
+                    current_user_id,
+                )
+                break
+
+            if not supervisor_id or supervisor_id not in users_by_id:
+                break
+
+            current_user_id = supervisor_id
+
+        for user_id in reversed(chain):
+            supervisor_name = format_supervisor_name_for_group(users_by_id[user_id], config)
+            parent_path = f"{parent_path}/{supervisor_name}" if parent_path else supervisor_name
+            if user_id in supervisor_ids:
+                supervisor_paths[user_id] = parent_path
     
     return supervisor_paths
 
@@ -410,4 +428,4 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
             users_by_id[user_id]['isManager'] = user.get('isManager', False)
 
     # Return processed users by email instead of original source data
-    return {user['email'].lower(): user for user in users_by_id.values()}, department_paths 
+    return {user['email'].lower(): user for user in users_by_id.values()}, department_paths

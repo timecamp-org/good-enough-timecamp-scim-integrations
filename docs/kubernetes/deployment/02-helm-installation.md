@@ -42,6 +42,23 @@ jobs:
 Store `HIBOB_SERVICE_USER_TOKEN` in the release Secret, not in this values
 file.
 
+For NetSuite, use `config.netsuite` and enable `jobs.fetchNetsuite`. Store the
+PEM private key as `NETSUITE_PRIVATE_KEY` in the release Secret:
+
+```yaml
+config:
+  netsuite:
+    accountId: "123456_SB1"
+    clientId: "your-oauth2-client-id"
+    certificateId: "your-certificate-id"
+    jwtAlgorithm: "PS256"
+
+jobs:
+  fetchNetsuite:
+    enabled: true
+    schedule: "0 */6 * * *"
+```
+
 ## 2. Configure secrets
 
 Do not commit API tokens or passwords to `my-values.yaml`. The chart expects

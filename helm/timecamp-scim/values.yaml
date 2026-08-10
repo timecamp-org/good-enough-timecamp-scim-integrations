@@ -93,6 +93,13 @@ jobs:
     command: ["python", "fetch_hibob.py"]
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 3
+
+  fetchNetsuite:
+    enabled: false
+    schedule: "0 */6 * * *"
+    command: ["python", "fetch_netsuite.py"]
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
     
   fetchAzuread:
     enabled: false
@@ -200,6 +207,21 @@ config:
     excludedDepartments: ""  # Comma-separated list
     supervisorRule: ""  # Rule for determining supervisors (e.g., "work.isManager:true")
     customFields: ""  # Comma-separated list of additional HiBob field paths
+
+  # NetSuite SuiteTalk REST / OAuth 2.0 client credentials configuration
+  netsuite:
+    accountId: ""
+    clientId: ""
+    certificateId: ""
+    privateKeyPath: ""  # Prefer NETSUITE_PRIVATE_KEY from the Kubernetes Secret
+    baseUrl: ""  # Optional account-specific API URL override
+    employeeQuery: ""  # Empty uses the standard employee query
+    groupQuery: ""  # Empty uses the standard department hierarchy query
+    pageSize: 1000
+    timeoutSeconds: 30
+    sslVerify: true
+    allowEmptyResult: false
+    jwtAlgorithm: "PS256"
   
   # Azure AD Configuration
   azure:

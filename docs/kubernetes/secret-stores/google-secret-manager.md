@@ -76,6 +76,7 @@ gcloud iam service-accounts add-iam-policy-binding $SA_EMAIL \
      "TIMECAMP_API_KEY": "your-actual-timecamp-api-key",
      "BAMBOOHR_API_KEY": "your-actual-bamboohr-api-key",
      "HIBOB_SERVICE_USER_TOKEN": "your-actual-hibob-service-user-token",
+     "NETSUITE_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----",
      "AZURE_CLIENT_SECRET": "your-actual-azure-secret",
      "AZURE_BEARER_TOKEN": "",
      "AZURE_REFRESH_TOKEN": "",

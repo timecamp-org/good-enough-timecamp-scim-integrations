@@ -3,7 +3,6 @@ version: '3.8'
 services:
   timecamp-scim:
     build: .
-    container_name: timecamp-scim
     volumes:
       - ./var:/app/var
     networks:
@@ -60,6 +59,20 @@ services:
       - HIBOB_EXCLUDED_DEPARTMENTS=${HIBOB_EXCLUDED_DEPARTMENTS:-}
       - HIBOB_SUPERVISOR_RULE=${HIBOB_SUPERVISOR_RULE:-}
       - HIBOB_CUSTOM_FIELDS=${HIBOB_CUSTOM_FIELDS:-}
+      # NetSuite Configuration
+      - NETSUITE_ACCOUNT_ID=${NETSUITE_ACCOUNT_ID:-}
+      - NETSUITE_CLIENT_ID=${NETSUITE_CLIENT_ID:-}
+      - NETSUITE_CERTIFICATE_ID=${NETSUITE_CERTIFICATE_ID:-}
+      - NETSUITE_PRIVATE_KEY=${NETSUITE_PRIVATE_KEY:-}
+      - NETSUITE_PRIVATE_KEY_PATH=${NETSUITE_PRIVATE_KEY_PATH:-}
+      - NETSUITE_BASE_URL=${NETSUITE_BASE_URL:-}
+      - NETSUITE_EMPLOYEE_QUERY=${NETSUITE_EMPLOYEE_QUERY:-}
+      - NETSUITE_GROUP_QUERY=${NETSUITE_GROUP_QUERY:-}
+      - NETSUITE_PAGE_SIZE=${NETSUITE_PAGE_SIZE:-1000}
+      - NETSUITE_TIMEOUT_SECONDS=${NETSUITE_TIMEOUT_SECONDS:-30}
+      - NETSUITE_SSL_VERIFY=${NETSUITE_SSL_VERIFY:-true}
+      - NETSUITE_ALLOW_EMPTY_RESULT=${NETSUITE_ALLOW_EMPTY_RESULT:-false}
+      - NETSUITE_JWT_ALGORITHM=${NETSUITE_JWT_ALGORITHM:-PS256}
       # Azure AD Configuration
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
@@ -125,6 +138,10 @@ services:
   fetch-hibob:
     extends: timecamp-scim
     command: ["python", "fetch_hibob.py"]
+
+  fetch-netsuite:
+    extends: timecamp-scim
+    command: ["python", "fetch_netsuite.py"]
     
   fetch-azuread:
     extends: timecamp-scim

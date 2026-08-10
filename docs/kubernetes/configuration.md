@@ -10,7 +10,7 @@ to environment variables in every CronJob.
 | Container image | `image` |
 | Job enablement and schedules | `jobs` |
 | TimeCamp behavior | `config.timecamp` |
-| Okta, Azure AD, LDAP, BambooHR, HiBob, or Factorial settings | Matching section under `config` |
+| Okta, Azure AD, LDAP, BambooHR, HiBob, NetSuite, or Factorial settings | Matching section under `config` |
 | API tokens, passwords, and access keys | Kubernetes Secret or External Secrets |
 | S3-compatible storage | `s3` |
 | Low-level process settings not modeled by the chart | Top-level `env` map |
@@ -128,6 +128,7 @@ Kubernetes Secret keys, either directly or through External Secrets:
 - `OKTA_API_TOKEN`
 - `BAMBOOHR_API_KEY`
 - `HIBOB_SERVICE_USER_TOKEN`
+- `NETSUITE_PRIVATE_KEY`
 - `AZURE_CLIENT_SECRET`
 - `LDAP_PASSWORD`
 - `FACTORIAL_API_KEY`

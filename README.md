@@ -10,6 +10,7 @@ Supported sources:
 - BambooHR
 - Factorial
 - HiBob
+- NetSuite (employees and department groups)
 
 ## Quick Start
 
@@ -24,6 +25,7 @@ uv run --python 3.14 --with-requirements requirements.txt fetch_ldap.py
 # uv run fetch_bamboohr.py
 # uv run fetch_hibob.py
 # uv run fetch_factorialhr.py
+# uv run fetch_netsuite.py
 
 # 3. Transform to the TimeCamp format
 uv run --python 3.14 --with-requirements requirements.txt prepare_timecamp_json_from_fetch.py
@@ -41,7 +43,7 @@ uv run --python 3.14 --with-requirements requirements.txt timecamp_sync_users.py
 
 ```mermaid
 flowchart LR
-    scim[SCIM system] -->|fetch_*.py| users[var/users.json]
+    source[HR, directory, or ERP source] -->|fetch_*.py| users[var/users.json]
     users -->|prepare_timecamp_json_from_fetch.py| timecamp_users[var/timecamp_users.json]
     timecamp_users -->|timecamp_sync_users.py| timecamp[TimeCamp]
 ```
@@ -61,6 +63,7 @@ flowchart LR
 - **[docs/fetch_azure.md](docs/fetch_azure.md)** - Fetching users from Azure AD / Entra ID
 - **[docs/fetch_okta.md](docs/fetch_okta.md)** - Fetching users from Okta
 - **[docs/fetch_hibob.md](docs/fetch_hibob.md)** - Fetching users from HiBob
+- **[docs/fetch_netsuite.md](docs/fetch_netsuite.md)** - Fetching users and department groups from NetSuite
 - **[docs/fetch_ldap.md](docs/fetch_ldap.md)** - Fetching users from LDAP
 - **[docs/docker.md](docs/docker.md)** - Docker and compose usage
 - **[docs/crontab.md](docs/crontab.md)** - Cron setup for scheduled runs

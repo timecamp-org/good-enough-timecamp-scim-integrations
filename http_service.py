@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 AVAILABLE_SCRIPTS = [
     'fetch_bamboohr.py',
     'fetch_hibob.py',
+    'fetch_netsuite.py',
     'fetch_azuread.py', 
     'fetch_okta.py',
     'fetch_ldap.py',

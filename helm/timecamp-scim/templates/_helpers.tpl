@@ -161,6 +161,39 @@ Common environment variables
 - name: HIBOB_CUSTOM_FIELDS
   value: {{ .customFields | quote }}
 {{- end }}
+{{- /* NetSuite Configuration */ -}}
+{{- with .Values.config.netsuite }}
+{{- if .accountId }}
+- name: NETSUITE_ACCOUNT_ID
+  value: {{ .accountId | quote }}
+{{- end }}
+{{- if .clientId }}
+- name: NETSUITE_CLIENT_ID
+  value: {{ .clientId | quote }}
+{{- end }}
+{{- if .certificateId }}
+- name: NETSUITE_CERTIFICATE_ID
+  value: {{ .certificateId | quote }}
+{{- end }}
+- name: NETSUITE_PRIVATE_KEY_PATH
+  value: {{ .privateKeyPath | quote }}
+- name: NETSUITE_BASE_URL
+  value: {{ .baseUrl | quote }}
+- name: NETSUITE_EMPLOYEE_QUERY
+  value: {{ .employeeQuery | quote }}
+- name: NETSUITE_GROUP_QUERY
+  value: {{ .groupQuery | quote }}
+- name: NETSUITE_PAGE_SIZE
+  value: {{ .pageSize | quote }}
+- name: NETSUITE_TIMEOUT_SECONDS
+  value: {{ .timeoutSeconds | quote }}
+- name: NETSUITE_SSL_VERIFY
+  value: {{ .sslVerify | quote }}
+- name: NETSUITE_ALLOW_EMPTY_RESULT
+  value: {{ .allowEmptyResult | quote }}
+- name: NETSUITE_JWT_ALGORITHM
+  value: {{ .jwtAlgorithm | quote }}
+{{- end }}
 {{- /* Azure AD Configuration */ -}}
 {{- with .Values.config.azure }}
 {{- if .tenantId }}
@@ -316,6 +349,14 @@ Secret environment variables from External Secrets
       name: {{ include "timecamp-scim.fullname" . }}-secrets
       key: HIBOB_SERVICE_USER_TOKEN
       optional: true
+{{- end }}
+{{- if .Values.jobs.fetchNetsuite.enabled }}
+- name: NETSUITE_PRIVATE_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "timecamp-scim.fullname" . }}-secrets
+      key: NETSUITE_PRIVATE_KEY
+      optional: false
 {{- end }}
 {{- if or .Values.jobs.fetchAzuread.enabled }}
 - name: AZURE_CLIENT_SECRET

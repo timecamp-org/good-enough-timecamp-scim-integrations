@@ -75,6 +75,7 @@ config:
     supervisorIdField: "managerId"  # Okta profile field containing manager user ID/login
     supervisorMatchField: "email"  # Manager field whose value is referenced by managerId
     supervisorRule: ""  # Optional: profile field rule, e.g. "timecampSupervisor:yes"
+    maxHierarchyRoots: 0  # Set an expected upper bound after reviewing validation logs
   
   ldap:
     host: "ldap.company.local"

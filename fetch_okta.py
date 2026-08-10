@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 import requests
@@ -26,6 +27,19 @@ def parse_csv(value):
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def parse_non_negative_int_env(name, default=0):
+    """Parse a non-negative integer environment setting with a useful error."""
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a non-negative integer, got '{raw_value}'") from exc
+
+    if value < 0:
+        raise ValueError(f"{name} must be a non-negative integer, got '{raw_value}'")
+    return value
 
 
 def normalize_org_url(org_url):
@@ -134,6 +148,238 @@ def parse_supervisor_rule(rule):
         return None, None
 
     return field, value
+
+
+def describe_okta_user(okta_user, transformed_user=None):
+    """Return non-sensitive identity fields suitable for remediation reports."""
+    profile = okta_user.get("profile", {}) or {}
+    transformed_user = transformed_user or {}
+    return {
+        "okta_user_id": str(okta_user.get("id") or ""),
+        "name": transformed_user.get("name") or build_display_name(profile, "displayName"),
+        "login": str(profile.get("login") or ""),
+        "external_id": str(transformed_user.get("external_id") or ""),
+        "email": str(transformed_user.get("email") or ""),
+    }
+
+
+def validate_required_active_user_fields(okta_user, user, field_config):
+    """Describe missing fields that an Okta administrator must repair."""
+    missing_fields = []
+    external_id_field = field_config.get("external_id", "id")
+    email_field = field_config.get("email", "email")
+    if not get_external_id(okta_user, external_id_field).strip():
+        missing_fields.append({
+            "schema_field": "external_id",
+            "okta_field": external_id_field,
+        })
+    if not str(get_profile_value(okta_user, email_field) or "").strip():
+        missing_fields.append({
+            "schema_field": "email",
+            "okta_field": email_field,
+        })
+
+    if not missing_fields:
+        return None
+
+    return {
+        **describe_okta_user(okta_user, user),
+        "missing_fields": missing_fields,
+    }
+
+
+def find_duplicate_external_ids(users):
+    """Return every external ID assigned to more than one Okta user."""
+    users_by_external_id = {}
+    for user in users:
+        external_id = str(user.get("external_id") or "").strip()
+        if external_id:
+            users_by_external_id.setdefault(external_id, []).append(user)
+
+    return [
+        {
+            "external_id": external_id,
+            "users": [
+                describe_okta_user(user.get("raw_data", {}), user)
+                for user in duplicate_users
+            ],
+        }
+        for external_id, duplicate_users in sorted(users_by_external_id.items())
+        if len(duplicate_users) > 1
+    ]
+
+
+def analyze_okta_hierarchy(users, unresolved_supervisor_ids=None, max_hierarchy_roots=0):
+    """Analyze roots and manager graph failures without changing the hierarchy."""
+    unresolved_supervisor_ids = unresolved_supervisor_ids or set()
+    users_by_id = {
+        str(user.get("external_id")): user
+        for user in users
+        if str(user.get("external_id") or "").strip()
+    }
+
+    self_managed_roots = []
+    cycles = []
+    visited = set()
+
+    for starting_user_id in sorted(users_by_id):
+        if starting_user_id in visited:
+            continue
+
+        chain = []
+        positions = {}
+        current_user_id = starting_user_id
+
+        while current_user_id in users_by_id and current_user_id not in visited:
+            if current_user_id in positions:
+                cycle_ids = chain[positions[current_user_id]:]
+                if len(cycle_ids) == 1:
+                    self_managed_roots.append(
+                        describe_okta_user(
+                            users_by_id[current_user_id].get("raw_data", {}),
+                            users_by_id[current_user_id],
+                        )
+                    )
+                else:
+                    cycles.append([
+                        describe_okta_user(users_by_id[user_id].get("raw_data", {}), users_by_id[user_id])
+                        for user_id in cycle_ids
+                    ])
+                break
+
+            positions[current_user_id] = len(chain)
+            chain.append(current_user_id)
+            supervisor_id = str(
+                users_by_id[current_user_id].get("supervisor_id") or ""
+            ).strip()
+            if not supervisor_id or supervisor_id not in users_by_id:
+                break
+            current_user_id = supervisor_id
+
+        visited.update(chain)
+
+    supervisor_ids = {
+        str(user.get("supervisor_id") or "").strip()
+        for user in users
+        if str(user.get("supervisor_id") or "").strip()
+    }
+    hierarchy_roots = []
+    for user_id in sorted(supervisor_ids.intersection(users_by_id)):
+        user = users_by_id[user_id]
+        if user.get("hierarchy_only") is True:
+            continue
+        supervisor_id = str(user.get("supervisor_id") or "").strip()
+        supervisor = users_by_id.get(supervisor_id)
+        if (
+            not supervisor_id
+            or supervisor_id == user_id
+            or supervisor is None
+            or supervisor.get("hierarchy_only") is True
+        ):
+            hierarchy_roots.append(describe_okta_user(user.get("raw_data", {}), user))
+
+    unresolved_supervisors = []
+    for supervisor_id in sorted(unresolved_supervisor_ids):
+        direct_reports = [
+            describe_okta_user(user.get("raw_data", {}), user)
+            for user in users
+            if str(user.get("supervisor_id") or "").strip() == supervisor_id
+        ]
+        unresolved_supervisors.append({
+            "supervisor_reference": supervisor_id,
+            "direct_reports": direct_reports,
+        })
+
+    return {
+        "duplicate_external_ids": find_duplicate_external_ids(users),
+        "unresolved_supervisors": unresolved_supervisors,
+        "self_managed_roots": self_managed_roots,
+        "cycles": cycles,
+        "hierarchy_roots": hierarchy_roots,
+        "root_limit": max_hierarchy_roots,
+        "root_limit_exceeded": bool(
+            max_hierarchy_roots > 0 and len(hierarchy_roots) > max_hierarchy_roots
+        ),
+    }
+
+
+def build_okta_validation_report(
+    field_config,
+    missing_required_fields=None,
+    hierarchy_analysis=None,
+):
+    """Build the durable report used to repair authoritative Okta data."""
+    missing_required_fields = missing_required_fields or []
+    hierarchy_analysis = hierarchy_analysis or analyze_okta_hierarchy([])
+    failed = bool(
+        missing_required_fields
+        or hierarchy_analysis["duplicate_external_ids"]
+        or hierarchy_analysis["unresolved_supervisors"]
+        or hierarchy_analysis["cycles"]
+        or hierarchy_analysis["root_limit_exceeded"]
+    )
+    return {
+        "provider": "okta",
+        "status": "failed" if failed else "passed",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "configured_fields": {
+            "external_id": field_config.get("external_id", "id"),
+            "email": field_config.get("email", "email"),
+            "supervisor_id": field_config.get("supervisor_id", "managerId"),
+        },
+        "repair_in_okta": {
+            "missing_identity": (
+                "Find the user by okta_user_id or login and populate every "
+                "missing_fields[].okta_field profile attribute."
+            ),
+            "unresolved_manager": (
+                "Correct the configured supervisor_id field on each direct report "
+                "or restore the referenced manager in Okta."
+            ),
+            "manager_cycle": (
+                "Correct the configured supervisor_id field for at least one user "
+                "in every reported cycle."
+            ),
+        },
+        "missing_required_fields": missing_required_fields,
+        **hierarchy_analysis,
+    }
+
+
+def log_okta_validation_report(report):
+    """Write one structured validation event through the standard job logger."""
+    serialized_report = json.dumps(report, sort_keys=True, separators=(",", ":"))
+    if report["status"] == "failed":
+        get_logger().error("Okta validation: %s", serialized_report)
+    else:
+        get_logger().info("Okta validation: %s", serialized_report)
+
+
+def raise_for_okta_validation_report(report):
+    """Raise one actionable failure after the structured result is logged."""
+    if report["status"] != "failed":
+        return
+
+    reasons = []
+    if report["missing_required_fields"]:
+        reasons.append(f"{len(report['missing_required_fields'])} active user(s) missing external ID or email")
+    if report["duplicate_external_ids"]:
+        reasons.append(f"{len(report['duplicate_external_ids'])} duplicate external ID value(s)")
+    if report["unresolved_supervisors"]:
+        reasons.append(f"{len(report['unresolved_supervisors'])} unresolved manager reference(s)")
+    if report["cycles"]:
+        reasons.append(f"{len(report['cycles'])} multi-user manager cycle(s)")
+    if report["root_limit_exceeded"]:
+        reasons.append(
+            f"{len(report['hierarchy_roots'])} hierarchy roots exceeds configured limit {report['root_limit']}"
+        )
+
+    raise ValueError(
+        "Okta data validation failed: "
+        + "; ".join(reasons)
+        + ". Fix the authoritative Okta profile fields, using the preceding "
+        "'Okta validation' log entry, and rerun fetch."
+    )
 
 
 def transform_okta_user_to_schema(user, field_config=None, supervisor_field=None, supervisor_value=None):
@@ -420,6 +666,7 @@ def fetch_missing_supervisors(
             )
             continue
         user["status"] = "inactive"
+        user["hierarchy_only"] = True
         inactive_supervisors.append(user)
 
     all_users = users + inactive_supervisors
@@ -489,6 +736,7 @@ def fetch_okta_users(debug=False):
         supervisor_match_field = (
             os.getenv("OKTA_SUPERVISOR_MATCH_FIELD", "").strip() or field_config["external_id"]
         )
+        max_hierarchy_roots = parse_non_negative_int_env("OKTA_MAX_HIERARCHY_ROOTS")
 
         supervisor_field, supervisor_value = parse_supervisor_rule(os.getenv("OKTA_SUPERVISOR_RULE", ""))
         if supervisor_field and supervisor_value is not None:
@@ -513,6 +761,7 @@ def fetch_okta_users(debug=False):
 
         allowed_statuses = set(statuses)
 
+        missing_required_fields = []
         for okta_user in okta_users:
             user_id = okta_user.get("id")
             user_status = str(okta_user.get("status") or "").upper()
@@ -521,10 +770,22 @@ def fetch_okta_users(debug=False):
 
             user = transform_okta_user_to_schema(okta_user, field_config, supervisor_field, supervisor_value)
 
-            if not user.get("email"):
+            if user.get("department") in excluded_departments:
                 continue
 
-            if user.get("department") in excluded_departments:
+            validation_issue = validate_required_active_user_fields(
+                okta_user,
+                user,
+                field_config,
+            )
+            if validation_issue:
+                if user_status == "ACTIVE":
+                    missing_required_fields.append(validation_issue)
+                else:
+                    logger.warning(
+                        "Skipping non-active Okta user %s because external ID or email is empty",
+                        user_id or "(unknown)",
+                    )
                 continue
 
             if user_id in supervisor_user_ids:
@@ -532,6 +793,15 @@ def fetch_okta_users(debug=False):
 
             logger.debug(f"Processed Okta user: {json.dumps(user, indent=2)}")
             users.append(user)
+
+        initial_report = build_okta_validation_report(
+            field_config,
+            missing_required_fields=missing_required_fields,
+            hierarchy_analysis=analyze_okta_hierarchy(users),
+        )
+        if initial_report["status"] == "failed":
+            log_okta_validation_report(initial_report)
+            raise_for_okta_validation_report(initial_report)
 
         logger.info("Checking for missing Okta supervisors in the hierarchy...")
         inactive_supervisors = fetch_missing_supervisors(
@@ -546,6 +816,22 @@ def fetch_okta_users(debug=False):
         if inactive_supervisors:
             logger.info(f"Found {len(inactive_supervisors)} inactive supervisors to complete the hierarchy")
             users.extend(inactive_supervisors)
+
+        unresolved_supervisor_ids = resolve_supervisor_ids(
+            users,
+            field_config,
+            supervisor_match_field,
+        )
+        validation_report = build_okta_validation_report(
+            field_config,
+            hierarchy_analysis=analyze_okta_hierarchy(
+                users,
+                unresolved_supervisor_ids,
+                max_hierarchy_roots,
+            ),
+        )
+        log_okta_validation_report(validation_report)
+        raise_for_okta_validation_report(validation_report)
 
         from common.storage import save_json_file
 

@@ -20,6 +20,7 @@ OKTA_JOB_TITLE_FIELD=title
 OKTA_SUPERVISOR_ID_FIELD=managerId
 OKTA_SUPERVISOR_MATCH_FIELD=
 OKTA_SUPERVISOR_RULE=
+OKTA_MAX_HIERARCHY_ROOTS=0
 ```
 
 `OKTA_FILTER_GROUPS` contains exact Okta group names. `OKTA_FILTER_GROUP_IDS` contains Okta group IDs. Both are optional and comma-separated. When either setting is configured, the fetcher reads users directly from the matching Okta group-members endpoints instead of listing every user in the organization. When both are configured, it includes the deduplicated union of their members. `OKTA_USER_STATUSES` is then applied to those group members. `OKTA_SUPERVISOR_GROUPS` contains exact group names and sets `role_id=2` for matching users.
@@ -44,6 +45,36 @@ When `OKTA_SUPERVISOR_MATCH_FIELD` is empty, it defaults to `OKTA_EXTERNAL_ID_FI
 OKTA_SUPERVISOR_RULE=timecampSupervisor:yes
 ```
 
+Missing managers are fetched only to resolve the reporting chain. If they are
+outside the selected Okta scope, they are hierarchy boundaries: they are not
+written as TimeCamp users or visible groups. The first in-scope manager below
+that boundary becomes a visible hierarchy root.
+
+## Validation and Okta repair
+
+Every fetch writes one structured `Okta validation: {...}` event to standard
+logs: `INFO` when validation passes and `ERROR` when it fails. A failure does
+not replace the last valid `var/users.json`; no separate validation file is
+created.
+
+The fetch fails for:
+
+- active in-scope users whose configured external-ID or email value is empty;
+- duplicate external IDs;
+- manager references that cannot be resolved after fetching missing managers;
+- manager cycles involving two or more users;
+- a visible root count above `OKTA_MAX_HIERARCHY_ROOTS`, when that value is positive.
+
+Self-managed users are valid hierarchy roots and appear in the report. With
+`OKTA_MAX_HIERARCHY_ROOTS=0`, root count is reported but not limited.
+
+Do not generate replacement IDs or fake emails in this integration. Use the
+log event's `okta_user_id`, `login`, and `missing_fields[].okta_field` values to
+open the user in Okta, repair the authoritative profile field, and rerun the
+fetch. For unresolved managers or cycles, correct the configured manager field
+in Okta. This keeps identity ownership in Okta and prevents unstable TimeCamp
+accounts.
+
 ### Kubernetes
 
 Use `config.okta` in Helm values instead of copying the environment-variable
@@ -59,6 +90,7 @@ config:
     externalIdField: "employeeNumber"
     supervisorIdField: "managerEmail"
     supervisorMatchField: "email"
+    maxHierarchyRoots: 20
 ```
 
 Store `OKTA_API_TOKEN` in the Kubernetes Secret. Do not put it in Helm values.

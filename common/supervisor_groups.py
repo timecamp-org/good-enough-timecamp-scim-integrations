@@ -92,7 +92,11 @@ def build_supervisor_paths(source_data: Dict[str, Any],
     # Resolve every path independently so a bad component cannot silently leave
     # the whole connected hierarchy unresolved and trigger direct-manager fallbacks.
     for starting_user_id in sorted(supervisor_ids):
-        if starting_user_id not in users_by_id or starting_user_id in supervisor_paths:
+        if (
+            starting_user_id not in users_by_id
+            or starting_user_id in supervisor_paths
+            or users_by_id[starting_user_id].get('hierarchy_only') is True
+        ):
             continue
 
         chain = []
@@ -101,6 +105,15 @@ def build_supervisor_paths(source_data: Dict[str, Any],
         parent_path = ""
 
         while current_user_id in users_by_id:
+            current_user = users_by_id[current_user_id]
+            if current_user.get('hierarchy_only') is True:
+                logger.info(
+                    "Stopping visible hierarchy at out-of-scope supervisor %s (%s)",
+                    current_user.get('name', '(unnamed)'),
+                    current_user_id,
+                )
+                break
+
             if current_user_id in supervisor_paths:
                 parent_path = supervisor_paths[current_user_id]
                 break
@@ -117,7 +130,6 @@ def build_supervisor_paths(source_data: Dict[str, Any],
             positions_in_chain[current_user_id] = len(chain)
             chain.append(current_user_id)
 
-            current_user = users_by_id[current_user_id]
             supervisor_id = str(current_user.get('supervisor_id') or '').strip()
 
             if supervisor_id == current_user_id:
@@ -160,7 +172,7 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
     
     for user in source_data['users']:
         user_id = user.get('external_id')
-        if not user_id:
+        if not user_id or user.get('hierarchy_only') is True:
             continue
             
         # Check if user is a supervisor
@@ -208,15 +220,22 @@ def assign_departments_supervisor(source_data: Dict[str, Any],
         elif has_supervisor:
             # Regular user with supervisor
             supervisor_id = user.get('supervisor_id')
+            supervisor = users_by_id.get(supervisor_id)
             if supervisor_id in supervisor_paths:
                 # Assign to the same group as their supervisor with skip_departments applied
                 user['department'] = clean_department_path(supervisor_paths[supervisor_id], config)
                 logger.debug(f"User {user.get('name')} assigned to supervisor's group: {user['department']}")
                 if user['department']:
                     department_paths.add(user['department'])
+            elif supervisor and supervisor.get('hierarchy_only') is True:
+                # The first in-scope individual contributor below an external manager
+                # belongs to the configured TimeCamp root, not to a placeholder group.
+                user['department'] = ""
+                logger.debug(
+                    f"User {user.get('name')} placed in root because their supervisor is out of scope"
+                )
             else:
                 # Fallback: direct supervisor's name with group formatting
-                supervisor = users_by_id.get(supervisor_id)
                 if supervisor:
                     supervisor_group_name = format_supervisor_name_for_group(supervisor, config)
                     user['department'] = clean_department_path(supervisor_group_name, config)
@@ -296,7 +315,7 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
     # Second pass: build department-supervisor paths
     for user in source_data['users']:
         user_id = user.get('external_id')
-        if not user_id:
+        if not user_id or user.get('hierarchy_only') is True:
             continue
             
         # Clean the original department path
@@ -324,7 +343,12 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
                 # Regular user with supervisor: combine department with supervisor's name
                 supervisor_id = user.get('supervisor_id')
                 supervisor = users_by_id.get(supervisor_id)
-                if supervisor:
+                if supervisor and supervisor.get('hierarchy_only') is True:
+                    user['department'] = original_department
+                    logger.debug(
+                        f"User {user.get('name')} kept in department group because their supervisor is out of scope"
+                    )
+                elif supervisor:
                     supervisor_name = format_supervisor_name_for_group(supervisor, config)  # Use group formatting
                     user['department'] = f"{original_department}/{supervisor_name}"
                     logger.debug(f"User {user.get('name')} assigned to hybrid group: {user['department']}")
@@ -343,11 +367,16 @@ def assign_departments_hybrid(source_data: Dict[str, Any],
                 logger.debug(f"Supervisor {user.get('name')} (no dept) assigned to group: {user['department']}")
             elif has_supervisor:
                 supervisor_id = user.get('supervisor_id')
+                supervisor = users_by_id.get(supervisor_id)
                 if supervisor_id in supervisor_paths:
                     user['department'] = supervisor_paths[supervisor_id]
                     logger.debug(f"User {user.get('name')} (no dept) assigned to supervisor's group: {user['department']}")
+                elif supervisor and supervisor.get('hierarchy_only') is True:
+                    user['department'] = ""
+                    logger.debug(
+                        f"User {user.get('name')} placed in root because their supervisor is out of scope"
+                    )
                 else:
-                    supervisor = users_by_id.get(supervisor_id)
                     if supervisor:
                         supervisor_group_name = format_supervisor_name_for_group(supervisor, config)
                         user['department'] = supervisor_group_name
@@ -428,4 +457,8 @@ def process_source_data(source_data: Dict[str, Any], config) -> Tuple[Dict[str, 
             users_by_id[user_id]['isManager'] = user.get('isManager', False)
 
     # Return processed users by email instead of original source data
-    return {user['email'].lower(): user for user in users_by_id.values()}, department_paths
+    return {
+        user['email'].lower(): user
+        for user in users_by_id.values()
+        if user.get('hierarchy_only') is not True
+    }, department_paths

@@ -326,6 +326,40 @@ class TestBuildSupervisorPaths:
         assert 'Director (dir-1)' in str(error.value)
         assert 'Manager (mgr-1)' in str(error.value)
 
+    def test_build_paths_omits_hierarchy_only_supervisor(self, mock_timecamp_config):
+        """An out-of-scope manager anchors but does not appear in visible paths."""
+        source_data = {'users': []}
+        users_by_id = {
+            'external-root': {
+                'name': 'External Root',
+                'supervisor_id': 'external-root',
+                'job_title': 'Executive',
+                'hierarchy_only': True,
+            },
+            'director-1': {
+                'name': 'Director',
+                'supervisor_id': 'external-root',
+                'job_title': 'Director',
+            },
+            'manager-1': {
+                'name': 'Manager',
+                'supervisor_id': 'director-1',
+                'job_title': 'Manager',
+            },
+        }
+        supervisor_ids = {'external-root', 'director-1', 'manager-1'}
+
+        paths = build_supervisor_paths(
+            source_data,
+            users_by_id,
+            supervisor_ids,
+            mock_timecamp_config,
+        )
+
+        assert 'external-root' not in paths
+        assert paths['director-1'] == 'Director'
+        assert paths['manager-1'] == 'Director/Manager'
+
 
 class TestAssignDepartmentsSupervisor:
     """Tests for assigning departments based on supervisor hierarchy."""

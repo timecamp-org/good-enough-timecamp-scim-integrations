@@ -44,6 +44,7 @@ config:
     jobTitleField: "title"
     supervisorIdField: "managerEmail"
     supervisorMatchField: "email"
+    maxHierarchyRoots: 20
 
   timecamp:
     domain: "app.timecamp.com"
@@ -104,6 +105,7 @@ spec:
       okta:
         orgUrl: "https://example.okta.com"
         filterGroupIds: "00gabc123"
+        maxHierarchyRoots: 20
       timecamp:
         domain: "app.timecamp.com"
         rootGroupId: "123456"
@@ -203,6 +205,7 @@ variables:
 
 ```text
 OKTA_FILTER_GROUP_IDS
+OKTA_MAX_HIERARCHY_ROOTS
 TIMECAMP_ROOT_GROUP_ID
 TIMECAMP_DISABLED_USERS_GROUP_ID
 TIMECAMP_SYNC_PERSISTENT_SETTINGS

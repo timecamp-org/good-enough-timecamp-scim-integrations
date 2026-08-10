@@ -1,6 +1,8 @@
 import os
 import json
-from typing import Dict, Any, Optional
+import hashlib
+from datetime import datetime, timezone
+from typing import Dict, Any
 from dotenv import load_dotenv
 from .logger import setup_logger
 
@@ -9,6 +11,22 @@ load_dotenv()
 
 # Initialize logger
 logger = setup_logger('storage')
+
+
+def _sha256(content: bytes) -> str:
+    """Return the content digest used in logs and S3 integrity metadata."""
+    return hashlib.sha256(content).hexdigest()
+
+
+def _utc_timestamp(value=None) -> str:
+    """Normalize datetime-like artifact timestamps for logs."""
+    if value is None:
+        value = datetime.now(timezone.utc)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat()
+    return str(value)
 
 
 class StorageService:
@@ -138,13 +156,28 @@ class StorageService:
         """Save content to S3."""
         try:
             s3_key = self._get_s3_key(filename)
+            content_bytes = content.encode('utf-8')
+            digest = _sha256(content_bytes)
+            generated_at = _utc_timestamp()
             self.s3_client.put_object(
                 Bucket=self.s3_bucket_name,
                 Key=s3_key,
-                Body=content.encode('utf-8'),
-                ContentType='application/json'
+                Body=content_bytes,
+                ContentType='application/json',
+                Metadata={
+                    'sha256': digest,
+                    'generated-at': generated_at,
+                },
             )
-            logger.debug(f"Successfully saved {filename} to S3: s3://{self.s3_bucket_name}/{s3_key}")
+            logger.info(
+                "Artifact saved: storage=s3 path=s3://%s/%s bytes=%s sha256=%s "
+                "generated_at=%s",
+                self.s3_bucket_name,
+                s3_key,
+                len(content_bytes),
+                digest,
+                generated_at,
+            )
         except Exception as e:
             logger.error(f"Failed to save {filename} to S3: {str(e)}")
             raise
@@ -153,9 +186,16 @@ class StorageService:
         """Save content to local file."""
         try:
             self._ensure_local_dir(filename)
-            with open(filename, 'w', encoding=encoding) as f:
-                f.write(content)
-            logger.debug(f"Successfully saved {filename} to local storage")
+            content_bytes = content.encode(encoding)
+            with open(filename, 'wb') as f:
+                f.write(content_bytes)
+            logger.info(
+                "Artifact saved: storage=local path=%s bytes=%s sha256=%s generated_at=%s",
+                filename,
+                len(content_bytes),
+                _sha256(content_bytes),
+                _utc_timestamp(),
+            )
         except Exception as e:
             logger.error(f"Failed to save {filename} to local storage: {str(e)}")
             raise
@@ -187,8 +227,29 @@ class StorageService:
                 Bucket=self.s3_bucket_name,
                 Key=s3_key
             )
-            content = response['Body'].read().decode('utf-8')
-            logger.debug(f"Successfully loaded {filename} from S3: s3://{self.s3_bucket_name}/{s3_key}")
+            content_bytes = response['Body'].read()
+            digest = _sha256(content_bytes)
+            object_metadata = response.get('Metadata') or {}
+            expected_digest = object_metadata.get('sha256')
+            if expected_digest and expected_digest != digest:
+                raise ValueError(
+                    f"Artifact integrity check failed for {filename}: "
+                    f"expected sha256 {expected_digest}, got {digest}"
+                )
+            logger.info(
+                "Artifact loaded: storage=s3 path=s3://%s/%s bytes=%s sha256=%s "
+                "artifact_timestamp=%s",
+                self.s3_bucket_name,
+                s3_key,
+                len(content_bytes),
+                digest,
+                _utc_timestamp(
+                    response.get('LastModified')
+                    or object_metadata.get('generated-at')
+                    or 'unknown'
+                ),
+            )
+            content = content_bytes.decode('utf-8')
             return json.loads(content)
         except self.ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
@@ -203,9 +264,17 @@ class StorageService:
     def _load_from_local(self, filename: str, encoding: str) -> Any:
         """Load JSON data from local file."""
         try:
-            with open(filename, 'r', encoding=encoding) as f:
-                content = f.read()
-            logger.debug(f"Successfully loaded {filename} from local storage")
+            with open(filename, 'rb') as f:
+                content_bytes = f.read()
+            logger.info(
+                "Artifact loaded: storage=local path=%s bytes=%s sha256=%s "
+                "artifact_timestamp=%s",
+                filename,
+                len(content_bytes),
+                _sha256(content_bytes),
+                _utc_timestamp(datetime.fromtimestamp(os.path.getmtime(filename), timezone.utc)),
+            )
+            content = content_bytes.decode(encoding)
             return json.loads(content)
         except FileNotFoundError:
             raise FileNotFoundError(f"File not found: {filename}")
@@ -322,4 +391,4 @@ def file_exists(filename: str) -> bool:
         True if the file exists, False otherwise
     """
     storage = get_storage_service()
-    return storage.exists(filename) 
+    return storage.exists(filename)

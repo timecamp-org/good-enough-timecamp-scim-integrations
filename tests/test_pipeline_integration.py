@@ -137,6 +137,67 @@ class TestPipelineBasicConfigurations:
         assert users_by_id['root-1']['timecamp_groups_breadcrumb'] == 'Root Supervisor'
         assert users_by_id['mgr-1']['timecamp_groups_breadcrumb'] == 'Root Supervisor/Manager'
         assert users_by_id['emp-1']['timecamp_groups_breadcrumb'] == 'Root Supervisor/Manager'
+
+    def test_hierarchy_only_supervisor_is_not_a_user_or_visible_group(self):
+        """A fetched external manager should make the first in-scope manager the root."""
+        source_data = {
+            'users': [
+                {
+                    'external_id': 'external-root',
+                    'name': 'External Root',
+                    'email': 'external-root@example.com',
+                    'department': '',
+                    'job_title': 'Executive',
+                    'status': 'inactive',
+                    'supervisor_id': 'external-root',
+                    'hierarchy_only': True,
+                },
+                {
+                    'external_id': 'director-1',
+                    'name': 'Director',
+                    'email': 'director@example.com',
+                    'department': '',
+                    'job_title': 'Director',
+                    'status': 'active',
+                    'supervisor_id': 'external-root',
+                },
+                {
+                    'external_id': 'manager-1',
+                    'name': 'Manager',
+                    'email': 'manager@example.com',
+                    'department': '',
+                    'job_title': 'Manager',
+                    'status': 'active',
+                    'supervisor_id': 'director-1',
+                },
+                {
+                    'external_id': 'employee-1',
+                    'name': 'Employee',
+                    'email': 'employee@example.com',
+                    'department': '',
+                    'job_title': 'Developer',
+                    'status': 'active',
+                    'supervisor_id': 'manager-1',
+                },
+            ]
+        }
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_USE_SUPERVISOR_GROUPS': 'true',
+            'TIMECAMP_USE_DEPARTMENT_GROUPS': 'false',
+        }
+
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                result = prepare_timecamp_users(source_data, config)
+
+        users_by_id = {user['timecamp_external_id']: user for user in result}
+        assert 'external-root' not in users_by_id
+        assert users_by_id['director-1']['timecamp_groups_breadcrumb'] == 'Director'
+        assert users_by_id['manager-1']['timecamp_groups_breadcrumb'] == 'Director/Manager'
+        assert users_by_id['employee-1']['timecamp_groups_breadcrumb'] == 'Director/Manager'
     
     def test_hybrid_mode_output(self):
         """Test output with hybrid mode (department + supervisor)."""

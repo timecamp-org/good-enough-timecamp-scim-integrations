@@ -218,6 +218,8 @@ Common environment variables
   value: {{ .supervisorMatchField | quote }}
 - name: OKTA_SUPERVISOR_RULE
   value: {{ .supervisorRule | quote }}
+- name: OKTA_MAX_HIERARCHY_ROOTS
+  value: {{ .maxHierarchyRoots | quote }}
 {{- end }}
 {{- /* LDAP Configuration */ -}}
 {{- with .Values.config.ldap }}

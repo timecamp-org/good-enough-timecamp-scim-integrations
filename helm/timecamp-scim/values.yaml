@@ -229,6 +229,7 @@ config:
     supervisorIdField: "managerId"
     supervisorMatchField: ""  # Manager field compared with supervisorIdField; defaults to externalIdField
     supervisorRule: ""  # Rule for is_supervisor, e.g. "timecampSupervisor:yes"
+    maxHierarchyRoots: 0  # 0 reports root count only; positive values fail above this limit
   
   # LDAP Configuration
   ldap:

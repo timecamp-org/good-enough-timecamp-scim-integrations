@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -39,6 +40,7 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("OKTA_SUPERVISOR_ID_FIELD", "managerId")
     monkeypatch.setenv("OKTA_SUPERVISOR_MATCH_FIELD", "")
     monkeypatch.setenv("OKTA_SUPERVISOR_RULE", "")
+    monkeypatch.setenv("OKTA_MAX_HIERARCHY_ROOTS", "0")
 
 
 def make_okta_user(
@@ -86,6 +88,17 @@ def mock_response(data, links=None, status_code=200):
 
     response.raise_for_status.side_effect = raise_for_status
     return response
+
+
+def get_logged_okta_validation(caplog):
+    """Parse the most recent structured Okta validation log event."""
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("Okta validation: ")
+    ]
+    assert messages
+    return json.loads(messages[-1].removeprefix("Okta validation: "))
 
 
 def test_normalize_org_url_adds_scheme_and_strips_slash():
@@ -353,6 +366,7 @@ def test_fetch_okta_users_filters_groups_marks_supervisors_and_fetches_missing_m
     assert users_by_id["00u1"]["role_id"] == "2"
     assert users_by_id["00u1"]["supervisor_id"] == "00u-manager"
     assert users_by_id["00u-manager"]["status"] == "inactive"
+    assert users_by_id["00u-manager"]["hierarchy_only"] is True
     assert users_by_id["00u-manager"]["raw_data"]["id"] == "00u-manager"
 
 
@@ -397,6 +411,7 @@ def test_fetch_okta_users_finds_manager_by_email_and_links_external_id(
     assert set(users_by_id) == {"employee-100", "manager-200"}
     assert users_by_id["employee-100"]["supervisor_id"] == "manager-200"
     assert users_by_id["manager-200"]["status"] == "inactive"
+    assert users_by_id["manager-200"]["hierarchy_only"] is True
 
 
 @patch("fetch_okta.requests.get")
@@ -412,3 +427,188 @@ def test_fetch_missing_supervisors_caches_404(mock_get):
 
     assert result == []
     assert "missing-manager" in fetch_okta.NOT_FOUND_USERS_CACHE
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_active_user_missing_identity_fields_logs_actionable_okta_validation(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+    caplog,
+):
+    caplog.set_level("INFO")
+    monkeypatch.setenv("OKTA_EXTERNAL_ID_FIELD", "employeeNumber")
+    monkeypatch.setenv("OKTA_EMAIL_FIELD", "primaryEmail")
+    invalid_user = make_okta_user(
+        "00u-invalid",
+        "login-only@example.com",
+        display_name="Example User",
+    )
+    mock_get.return_value = mock_response([invalid_user])
+
+    with pytest.raises(ValueError, match="Fix the authoritative Okta profile fields"):
+        fetch_okta_users()
+
+    mock_save.assert_not_called()
+    report = get_logged_okta_validation(caplog)
+    assert report["status"] == "failed"
+    assert "missing_fields[].okta_field" in report["repair_in_okta"]["missing_identity"]
+    assert report["missing_required_fields"] == [{
+        "okta_user_id": "00u-invalid",
+        "name": "Example User",
+        "login": "login-only@example.com",
+        "external_id": "",
+        "email": "login-only@example.com",
+        "missing_fields": [
+            {"schema_field": "external_id", "okta_field": "employeeNumber"},
+            {"schema_field": "email", "okta_field": "primaryEmail"},
+        ],
+    }]
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_duplicate_external_ids_fail_before_replacing_users_artifact(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+    caplog,
+):
+    caplog.set_level("INFO")
+    monkeypatch.setenv("OKTA_EXTERNAL_ID_FIELD", "employeeNumber")
+    mock_get.return_value = mock_response([
+        make_okta_user(
+            "00u-one",
+            "one@example.com",
+            display_name="Example One",
+            extra_profile={"employeeNumber": "employee-1"},
+        ),
+        make_okta_user(
+            "00u-two",
+            "two@example.com",
+            display_name="Example Two",
+            extra_profile={"employeeNumber": "employee-1"},
+        ),
+    ])
+
+    with pytest.raises(ValueError, match="duplicate external ID"):
+        fetch_okta_users()
+
+    mock_save.assert_not_called()
+    report = get_logged_okta_validation(caplog)
+    assert report["duplicate_external_ids"][0]["external_id"] == "employee-1"
+    assert {user["okta_user_id"] for user in report["duplicate_external_ids"][0]["users"]} == {
+        "00u-one",
+        "00u-two",
+    }
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_unresolved_manager_reference_is_reported_and_fails(
+    mock_save,
+    mock_get,
+    mock_env,
+    caplog,
+):
+    caplog.set_level("INFO")
+    employee = make_okta_user(
+        "00u-employee",
+        "employee@example.com",
+        display_name="Example Employee",
+        manager_id="00u-missing",
+    )
+    mock_get.side_effect = [
+        mock_response([employee]),
+        mock_response({"error": "not found"}, status_code=404),
+    ]
+
+    with pytest.raises(ValueError, match="unresolved manager reference"):
+        fetch_okta_users()
+
+    mock_save.assert_not_called()
+    report = get_logged_okta_validation(caplog)
+    assert report["unresolved_supervisors"] == [{
+        "supervisor_reference": "00u-missing",
+        "direct_reports": [{
+            "okta_user_id": "00u-employee",
+            "name": "Example Employee",
+            "login": "employee@example.com",
+            "external_id": "00u-employee",
+            "email": "employee@example.com",
+        }],
+    }]
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_multi_user_manager_cycle_is_reported_and_fails(
+    mock_save,
+    mock_get,
+    mock_env,
+    caplog,
+):
+    caplog.set_level("INFO")
+    mock_get.return_value = mock_response([
+        make_okta_user("00u-one", "one@example.com", manager_id="00u-two"),
+        make_okta_user("00u-two", "two@example.com", manager_id="00u-one"),
+    ])
+
+    with pytest.raises(ValueError, match="multi-user manager cycle"):
+        fetch_okta_users()
+
+    mock_save.assert_not_called()
+    report = get_logged_okta_validation(caplog)
+    assert [user["external_id"] for user in report["cycles"][0]] == ["00u-one", "00u-two"]
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_self_managed_users_are_reported_as_allowed_roots(
+    mock_save,
+    mock_get,
+    mock_env,
+    caplog,
+):
+    caplog.set_level("INFO")
+    mock_get.return_value = mock_response([
+        make_okta_user("00u-root", "root@example.com", manager_id="00u-root"),
+    ])
+
+    fetch_okta_users()
+
+    report = get_logged_okta_validation(caplog)
+    saved_users = mock_save.call_args.args[0]["users"]
+    assert mock_save.call_count == 1
+    assert report["status"] == "passed"
+    assert [user["external_id"] for user in report["self_managed_roots"]] == ["00u-root"]
+    assert [user["external_id"] for user in report["hierarchy_roots"]] == ["00u-root"]
+    assert [user["external_id"] for user in saved_users] == ["00u-root"]
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_hierarchy_root_limit_is_configurable_and_enforced(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+    caplog,
+):
+    caplog.set_level("INFO")
+    monkeypatch.setenv("OKTA_MAX_HIERARCHY_ROOTS", "1")
+    mock_get.return_value = mock_response([
+        make_okta_user("00u-root-one", "root-one@example.com", manager_id="00u-root-one"),
+        make_okta_user("00u-root-two", "root-two@example.com", manager_id="00u-root-two"),
+    ])
+
+    with pytest.raises(ValueError, match="hierarchy roots exceeds configured limit 1"):
+        fetch_okta_users()
+
+    mock_save.assert_not_called()
+    report = get_logged_okta_validation(caplog)
+    assert report["root_limit_exceeded"] is True
+    assert len(report["hierarchy_roots"]) == 2

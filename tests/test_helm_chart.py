@@ -82,3 +82,16 @@ def test_every_timecamp_helm_config_field_is_declared_and_rendered():
 
         assert field_name in declared_fields
         assert expected_template in template
+
+
+def test_okta_hierarchy_root_limit_is_declared_and_rendered():
+    values = (REPOSITORY_ROOT / "helm" / "timecamp-scim" / "values.yaml").read_text()
+    template = (
+        REPOSITORY_ROOT / "helm" / "timecamp-scim" / "templates" / "_helpers.tpl"
+    ).read_text()
+
+    assert "maxHierarchyRoots: 0" in values
+    assert (
+        "- name: OKTA_MAX_HIERARCHY_ROOTS\n"
+        "  value: {{ .maxHierarchyRoots | quote }}"
+    ) in template

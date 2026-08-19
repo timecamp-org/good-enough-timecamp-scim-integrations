@@ -372,6 +372,36 @@ class TestTimeCampSynchronizer:
         # Should re-enable user
         mock_timecamp_api.update_user_setting.assert_any_call(1001, 'disabled_user', '0')
         mock_timecamp_api.update_user_setting.assert_any_call(1001, 'added_manually', '0')
+
+    def test_update_existing_user_skips_additional_email_matching_primary(
+        self, mock_timecamp_api, mock_timecamp_config, caplog
+    ):
+        """Test that a primary email is not also written as an additional email."""
+        existing_user = {
+            'user_id': '1001',
+            'email': 'user@test.com',
+            'display_name': 'User Name',
+            'group_id': '100',
+            'is_enabled': True,
+        }
+        tc_user_data = {
+            'timecamp_email': 'user@test.com',
+            'timecamp_real_email': 'USER@Test.com',
+            'timecamp_user_name': 'User Name',
+            'timecamp_role': 'user',
+            'timecamp_status': 'active',
+        }
+
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        with caplog.at_level('INFO', logger='timecamp_sync_v2'):
+            sync._update_existing_user(
+                existing_user, tc_user_data, 100, 'root',
+                {}, {}, {}, {'1001': [{'group_id': '100', 'role_id': '3'}]},
+                False, dry_run=False,
+            )
+
+        mock_timecamp_api.set_additional_email.assert_not_called()
+        assert 'Skipping additional email for user user@test.com: it matches the primary email' in caplog.text
     
     def test_handle_deactivations_user_not_in_source(self, mock_timecamp_api, mock_timecamp_config):
         """Test deactivating users not in source data."""
@@ -640,6 +670,37 @@ class TestTimeCampSynchronizer:
         
         # Should set external ID
         mock_timecamp_api.update_user_setting.assert_any_call(1004, 'external_id', 'ext-123')
+
+    def test_finalize_new_users_skips_additional_email_matching_primary(
+        self, mock_timecamp_api, mock_timecamp_config, caplog
+    ):
+        """Test that new users do not receive their primary email as an additional email."""
+        mock_timecamp_api.get_users.return_value = [
+            {
+                'user_id': '1004',
+                'email': 'newuser@test.com',
+                'display_name': 'New User',
+                'group_id': '101',
+                'is_enabled': True,
+            }
+        ]
+        sync = TimeCampSynchronizer(mock_timecamp_api, mock_timecamp_config)
+        sync.newly_created_users = [
+            {
+                'email': 'newuser@test.com',
+                'name': 'New User',
+                'group_id': 101,
+                'role': 'user',
+                'real_email': 'NEWUSER@test.com',
+                'external_id': None,
+            }
+        ]
+
+        with caplog.at_level('INFO', logger='timecamp_sync_v2'):
+            sync._finalize_new_users()
+
+        mock_timecamp_api.set_additional_email.assert_not_called()
+        assert 'Skipping additional email for new user newuser@test.com: it matches the primary email' in caplog.text
     
     def test_finalize_new_users_sets_added_manually_with_no_optional_settings(self, mock_timecamp_api, mock_timecamp_config):
         """Test that added_manually=0 is set even when no optional settings (role/email/external_id) apply."""

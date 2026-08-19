@@ -386,11 +386,15 @@ class TimeCampSynchronizer:
         
         # Handle additional email
         if 'timecamp_real_email' in tc_user_data and not self.config.disable_additional_email_sync:
+            desired_add_email = tc_user_data['timecamp_real_email']
+            effective_primary_email = updates.get('email', existing_user['email'])
             current_add_email = additional_emails.get(user_id)
-            if current_add_email != tc_user_data['timecamp_real_email']:
+            if desired_add_email.strip().casefold() == effective_primary_email.strip().casefold():
+                logger.info(f"Skipping additional email for user {email}: it matches the primary email")
+            elif current_add_email != desired_add_email:
                 if not dry_run:
                     logger.info(f"Updating additional email for user {email}")
-                    self.api.set_additional_email(user_id, tc_user_data['timecamp_real_email'])
+                    self.api.set_additional_email(user_id, desired_add_email)
                     if self.config.persistent_settings:
                         self._queue_user_setting(user_id, email, 'added_manually', '0')
                     else:
@@ -656,9 +660,12 @@ class TimeCampSynchronizer:
             self.api.update_user(user_id, {'role_id': role_id}, new_user['group_id'])
 
         # Set additional email if present
-        if new_user.get('real_email'):
+        real_email = new_user.get('real_email')
+        if real_email and real_email.strip().casefold() == email.strip().casefold():
+            logger.info(f"Skipping additional email for new user {email}: it matches the primary email")
+        elif real_email:
             logger.info(f"Setting additional email for new user {email}")
-            self.api.set_additional_email(user_id, new_user['real_email'])
+            self.api.set_additional_email(user_id, real_email)
 
         # Set external ID if present
         if new_user.get('external_id') and not self.config.disable_external_id_sync:

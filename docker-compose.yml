@@ -165,15 +165,6 @@ services:
     extends: timecamp-scim
     command: ["python", "scripts/remove_empty_groups.py"]
     
-  # HTTP service to run any Python script via REST API
-  http-service:
-    extends: timecamp-scim
-    command: ["python", "http_service.py"]
-    ports:
-      - "8181:8181"
-    networks:
-      - timecamp-scim-network
-
 networks:
   timecamp-scim-network:
     driver: bridge

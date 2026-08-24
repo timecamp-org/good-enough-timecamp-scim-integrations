@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from http_service import AVAILABLE_SCRIPTS
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,10 +23,6 @@ def test_docker_compose_exposes_hibob_fetcher():
         "HIBOB_CUSTOM_FIELDS",
     ):
         assert f"- {variable}=" in compose
-
-
-def test_http_service_allows_hibob_fetcher():
-    assert "fetch_hibob.py" in AVAILABLE_SCRIPTS
 
 
 def test_helm_chart_exposes_hibob_fetcher():
@@ -72,7 +66,6 @@ def test_hibob_docs_cover_local_docker_and_kubernetes_usage():
 
     assert "docs/fetch_hibob.md" in readme
     assert "fetch-hibob" in docker_docs
-    assert "fetch_hibob.py" in docker_docs
 
     assert "HIBOB_SERVICE_USER_ID" in hibob_docs
     assert "HIBOB_SERVICE_USER_TOKEN" in hibob_docs

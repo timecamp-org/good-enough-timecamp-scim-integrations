@@ -300,7 +300,6 @@ To reach higher coverage, consider adding tests for:
    - fetch_bamboohr.py
    - fetch_factorialhr.py
    - fetch_ldap.py (priority for LDAP focus)
-   - http_service.py
 
 3. **Uncovered branches**
    - Error handling paths
@@ -312,4 +311,3 @@ To reach higher coverage, consider adding tests for:
 **Generated:** December 2024  
 **Test Suite Version:** 1.0  
 **Last Test Run:** All 214 tests passing ✅
-

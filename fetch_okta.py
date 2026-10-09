@@ -7,6 +7,7 @@ from urllib.parse import quote
 import requests
 from dotenv import load_dotenv
 
+from common.custom_fields import extract_custom_fields, parse_custom_field_mapping
 from common.logger import setup_logger
 
 logger = None
@@ -402,7 +403,7 @@ def transform_okta_user_to_schema(user, field_config=None, supervisor_field=None
         field_value = get_profile_value(user, supervisor_field)
         is_supervisor = str(field_value).strip() == supervisor_value
 
-    return {
+    transformed_user = {
         "external_id": get_external_id(user, external_id_field),
         "name": build_display_name(profile, name_field),
         "email": str(email).lower() if email else "",
@@ -413,6 +414,16 @@ def transform_okta_user_to_schema(user, field_config=None, supervisor_field=None
         "is_supervisor": is_supervisor,
         "raw_data": user,
     }
+
+    custom_field_mapping = field_config.get("custom_fields")
+    if custom_field_mapping:
+        transformed_user["custom_fields"] = extract_custom_fields(
+            user,
+            custom_field_mapping,
+            get_profile_value,
+        )
+
+    return transformed_user
 
 
 def resolve_supervisor_ids(users, field_config, supervisor_match_field):
@@ -732,6 +743,10 @@ def fetch_okta_users(debug=False):
             "department": os.getenv("OKTA_DEPARTMENT_FIELD", "department"),
             "job_title": os.getenv("OKTA_JOB_TITLE_FIELD", "title"),
             "supervisor_id": os.getenv("OKTA_SUPERVISOR_ID_FIELD", "managerId"),
+            "custom_fields": parse_custom_field_mapping(
+                os.getenv("OKTA_TIMECAMP_CUSTOM_FIELDS", ""),
+                "OKTA_TIMECAMP_CUSTOM_FIELDS",
+            ),
         }
         supervisor_match_field = (
             os.getenv("OKTA_SUPERVISOR_MATCH_FIELD", "").strip() or field_config["external_id"]
@@ -741,6 +756,9 @@ def fetch_okta_users(debug=False):
         supervisor_field, supervisor_value = parse_supervisor_rule(os.getenv("OKTA_SUPERVISOR_RULE", ""))
         if supervisor_field and supervisor_value is not None:
             logger.info(f"Using Okta supervisor rule: {supervisor_field} = '{supervisor_value}'")
+
+        for okta_field, timecamp_name in field_config["custom_fields"]:
+            logger.info(f"Mapping Okta field '{okta_field}' to TimeCamp custom field '{timecamp_name}'")
 
         client = OktaClient(org_url, api_token)
 

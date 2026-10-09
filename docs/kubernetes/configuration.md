@@ -45,6 +45,7 @@ config:
     supervisorIdField: "managerEmail"
     supervisorMatchField: "email"
     maxHierarchyRoots: 20
+    timecampCustomFields: "title:Job Position"
 
   timecamp:
     domain: "app.timecamp.com"

@@ -21,6 +21,7 @@ OKTA_SUPERVISOR_ID_FIELD=managerId
 OKTA_SUPERVISOR_MATCH_FIELD=
 OKTA_SUPERVISOR_RULE=
 OKTA_MAX_HIERARCHY_ROOTS=0
+OKTA_TIMECAMP_CUSTOM_FIELDS=
 ```
 
 `OKTA_FILTER_GROUPS` contains exact Okta group names. `OKTA_FILTER_GROUP_IDS` contains Okta group IDs. Both are optional and comma-separated. When either setting is configured, the fetcher reads users directly from the matching Okta group-members endpoints instead of listing every user in the organization. When both are configured, it includes the deduplicated union of their members. `OKTA_USER_STATUSES` is then applied to those group members. `OKTA_SUPERVISOR_GROUPS` contains exact group names and sets `role_id=2` for matching users.
@@ -44,6 +45,23 @@ When `OKTA_SUPERVISOR_MATCH_FIELD` is empty, it defaults to `OKTA_EXTERNAL_ID_FI
 ```env
 OKTA_SUPERVISOR_RULE=timecampSupervisor:yes
 ```
+
+## TimeCamp user custom fields
+
+`OKTA_TIMECAMP_CUSTOM_FIELDS` copies Okta profile fields to TimeCamp user
+custom fields. Each comma-separated entry is `okta_field:TimeCamp field name`:
+
+```env
+OKTA_TIMECAMP_CUSTOM_FIELDS=title:Job Position,costCenter:Cost Center
+```
+
+The Okta field can be a profile field name or a dotted path, for example
+`profile.title`. The TimeCamp field name is the name of a user custom field
+that already exists in TimeCamp. The fetcher writes the values to the
+`custom_fields` object of each user in `var/users.json`, and
+`timecamp_sync_users.py` updates the TimeCamp values. An empty Okta value
+clears the TimeCamp value. Okta fields with many values are joined with `, `.
+See [User custom fields](../README.md#user-custom-fields) for the sync rules.
 
 Missing managers are fetched only to resolve the reporting chain. If they are
 outside the selected Okta scope, they are hierarchy boundaries: they are not
@@ -91,6 +109,7 @@ config:
     supervisorIdField: "managerEmail"
     supervisorMatchField: "email"
     maxHierarchyRoots: 20
+    timecampCustomFields: "title:Job Position"
 ```
 
 Store `OKTA_API_TOKEN` in the Kubernetes Secret. Do not put it in Helm values.

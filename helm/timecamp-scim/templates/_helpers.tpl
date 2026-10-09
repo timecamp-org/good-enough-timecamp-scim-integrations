@@ -94,6 +94,8 @@ Common environment variables
   value: {{ .disableExternalIdSync | quote }}
 - name: TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC
   value: {{ .disableAdditionalEmailSync | quote }}
+- name: TIMECAMP_DISABLE_CUSTOM_FIELDS_SYNC
+  value: {{ .disableCustomFieldsSync | quote }}
 - name: TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID
   value: {{ .updateEmailOnExternalId | quote }}
 - name: TIMECAMP_DISABLE_MANUAL_USER_UPDATES
@@ -220,6 +222,8 @@ Common environment variables
   value: {{ .supervisorRule | quote }}
 - name: OKTA_MAX_HIERARCHY_ROOTS
   value: {{ .maxHierarchyRoots | quote }}
+- name: OKTA_TIMECAMP_CUSTOM_FIELDS
+  value: {{ .timecampCustomFields | quote }}
 {{- end }}
 {{- /* LDAP Configuration */ -}}
 {{- with .Values.config.ldap }}

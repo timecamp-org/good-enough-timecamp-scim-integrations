@@ -10,7 +10,9 @@ import json
 import time
 import argparse
 from typing import Dict, List, Any, Set, Tuple, Optional
+import requests
 from dotenv import load_dotenv
+from common.custom_fields import custom_field_values_equal, is_valid_number
 from common.logger import setup_logger
 from common.utils import TimeCampConfig, obfuscate_secret
 from common.api import TimeCampAPI
@@ -44,6 +46,13 @@ class TimeCampSynchronizer:
         self.config = config
         self.newly_created_users = []
         self.pending_settings = {}
+        # User custom field templates by exact and case-insensitive name, loaded on first use
+        self.custom_field_templates: Optional[Dict[str, Dict[str, Any]]] = None
+        self.custom_field_templates_casefold: Dict[str, Optional[Dict[str, Any]]] = {}
+        # Current custom field values: {user_id: {template_id: value}}; None until loaded
+        self.custom_field_values: Optional[Dict[int, Dict[int, Optional[str]]]] = None
+        self.custom_fields_unavailable = False
+        self.reported_custom_field_problems: Set[str] = set()
         
     def _build_group_paths(self, groups: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Build a map of full paths to group details from flat group list."""
@@ -188,6 +197,12 @@ class TimeCampSynchronizer:
                 user_id = int(user['user_id'])
                 user['is_enabled'] = not (str(disabled_statuses.get(user_id)) == '1')
             current_roles = self.api.get_user_roles()
+
+            if self._has_custom_fields_to_sync(timecamp_users):
+                self._load_custom_field_values(
+                    [user_id for user_id in all_user_ids if user_id not in self.config.ignored_user_ids],
+                    timecamp_users,
+                )
         
         # Build reverse mapping from additional emails
         additional_email_to_user = {}
@@ -419,6 +434,162 @@ class TimeCampSynchronizer:
                 else:
                     logger.info(f"[DRY RUN] Would update external ID for user {email}")
                     logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after external ID update")
+
+        # Handle custom fields
+        if (
+            tc_user_data.get('timecamp_custom_fields')
+            and not self.config.disable_custom_fields_sync
+            and self.custom_field_values is not None
+        ):
+            custom_fields_changed = self._sync_user_custom_fields(
+                user_id, email, tc_user_data['timecamp_custom_fields'],
+                self.custom_field_values.get(user_id, {}), dry_run
+            )
+            if custom_fields_changed:
+                if not dry_run:
+                    if self.config.persistent_settings:
+                        self._queue_user_setting(user_id, email, 'added_manually', '0')
+                    else:
+                        logger.info(f"Setting added_manually=0 for user {email} after custom fields update")
+                        self.api.update_user_setting(user_id, 'added_manually', '0')
+                else:
+                    logger.info(f"[DRY RUN] Would set added_manually=0 for user {email} after custom fields update")
+
+    def _has_custom_fields_to_sync(self, timecamp_users: List[Dict[str, Any]]) -> bool:
+        """Return True when custom field sync is enabled and an active user has custom fields."""
+        if self.config.disable_custom_fields_sync:
+            return False
+        return any(
+            user.get('timecamp_custom_fields') and user.get('timecamp_status') == 'active'
+            for user in timecamp_users
+        )
+
+    def _report_custom_field_problem_once(self, key: str, message: str) -> None:
+        """Log a custom field configuration problem only once per sync run."""
+        if key not in self.reported_custom_field_problems:
+            self.reported_custom_field_problems.add(key)
+            logger.warning(message)
+
+    def _load_custom_field_templates(self) -> None:
+        """Load TimeCamp user custom field templates once per sync run."""
+        if self.custom_field_templates is not None or self.custom_fields_unavailable:
+            return
+
+        try:
+            templates = self.api.get_custom_field_templates('user')
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Cannot read TimeCamp user custom fields, custom fields will not be synced: {e}")
+            self.custom_fields_unavailable = True
+            return
+
+        self.custom_field_templates = {}
+        self.custom_field_templates_casefold = {}
+        for template in templates:
+            name = str(template.get('name', '')).strip()
+            self.custom_field_templates[name] = template
+            # Two templates that differ only by letter case can only be matched by exact name
+            key = name.casefold()
+            self.custom_field_templates_casefold[key] = (
+                None if key in self.custom_field_templates_casefold else template
+            )
+        logger.info(f"Loaded {len(templates)} TimeCamp user custom field(s)")
+
+    def _find_custom_field_template(self, name: str) -> Optional[Dict[str, Any]]:
+        """Find a TimeCamp user custom field template by name."""
+        self._load_custom_field_templates()
+        if self.custom_field_templates is None:
+            return None
+
+        template = (
+            self.custom_field_templates.get(name)
+            or self.custom_field_templates_casefold.get(name.casefold())
+        )
+        if template is None:
+            available = ', '.join(f"'{n}'" for n in sorted(self.custom_field_templates)) or '(none)'
+            self._report_custom_field_problem_once(
+                f"missing:{name}",
+                f"TimeCamp user custom field '{name}' was not found, its values will not be synced. "
+                f"Create it in TimeCamp or fix the custom field mapping. Available user custom fields: {available}"
+            )
+        return template
+
+    def _load_custom_field_values(self, user_ids: List[int], timecamp_users: List[Dict[str, Any]]) -> None:
+        """Load current custom field values of TimeCamp users in bulk."""
+        names = {
+            name
+            for user in timecamp_users
+            if user.get('timecamp_status') == 'active'
+            for name in (user.get('timecamp_custom_fields') or {})
+        }
+        templates = [self._find_custom_field_template(name) for name in sorted(names)]
+        template_ids = sorted({int(template['id']) for template in templates if template})
+        if self.custom_fields_unavailable:
+            return
+        if not template_ids or not user_ids:
+            self.custom_field_values = {}
+            return
+
+        try:
+            self.custom_field_values = self.api.get_custom_field_values('user', user_ids, template_ids)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Cannot read TimeCamp user custom field values, custom fields will not be synced: {e}")
+            self.custom_fields_unavailable = True
+            return
+        logger.info(f"Loaded custom field values for {len(self.custom_field_values)} TimeCamp user(s)")
+
+    def _sync_user_custom_fields(self, user_id: int, email: str,
+                                 desired_fields: Dict[str, Optional[str]],
+                                 current_values: Dict[int, Optional[str]],
+                                 dry_run: bool) -> bool:
+        """Apply source custom field values to one TimeCamp user.
+
+        A string value sets the field and None clears it. Returns True when a value changed.
+        """
+        changed = False
+
+        for name, desired in desired_fields.items():
+            template = self._find_custom_field_template(name)
+            if template is None:
+                continue
+
+            template_id = int(template['id'])
+            field_type = template.get('fieldType', 'string')
+            current = current_values.get(template_id)
+            if custom_field_values_equal(current, desired, field_type):
+                continue
+
+            if desired is None and template.get('required'):
+                self._report_custom_field_problem_once(
+                    f"required:{name}",
+                    f"TimeCamp custom field '{name}' is required, so the sync does not clear it "
+                    f"for users with an empty source value"
+                )
+                continue
+            if desired is not None and field_type == 'number' and not is_valid_number(desired):
+                logger.warning(f"Skipping custom field '{name}' for user {email}: '{desired}' is not a number")
+                continue
+
+            change = (
+                f"custom field '{name}' for user {email} from "
+                f"'{current if current is not None else '(empty)'}' to "
+                f"'{desired if desired is not None else '(empty)'}'"
+            )
+            if dry_run:
+                logger.info(f"[DRY RUN] Would update {change}")
+                changed = True
+                continue
+
+            try:
+                logger.info(f"Updating {change}")
+                if desired is None:
+                    self.api.unassign_custom_field_value(template_id, user_id)
+                else:
+                    self.api.assign_custom_field_value(template_id, user_id, desired)
+                changed = True
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to update {change}: {e}")
+
+        return changed
     
     def _create_new_user(self, tc_user_data: Dict[str, Any], 
                         target_group_id: int, target_group_name: str,
@@ -439,7 +610,8 @@ class TimeCampSynchronizer:
                 'group_id': target_group_id,
                 'real_email': tc_user_data.get('timecamp_real_email'),
                 'external_id': tc_user_data.get('timecamp_external_id'),
-                'role': tc_user_data.get('timecamp_role', 'user')
+                'role': tc_user_data.get('timecamp_role', 'user'),
+                'custom_fields': tc_user_data.get('timecamp_custom_fields')
             })
         else:
             logger.info(f"[DRY RUN] Would create user: {email} in group '{target_group_name}'")
@@ -671,6 +843,10 @@ class TimeCampSynchronizer:
         if new_user.get('external_id') and not self.config.disable_external_id_sync:
             logger.info(f"Setting external ID for new user {email}")
             self.api.update_user_setting(user_id, 'external_id', new_user['external_id'])
+
+        # Set custom fields if present
+        if new_user.get('custom_fields') and not self.config.disable_custom_fields_sync:
+            self._sync_user_custom_fields(user_id, email, new_user['custom_fields'], {}, dry_run=False)
 
         # Always set added_manually=0 after all settings are applied
         if self.config.persistent_settings:
@@ -1008,6 +1184,7 @@ def main():
         logger.info(f"  TIMECAMP_DISABLE_ROLE_UPDATES = {config.disable_role_updates}")
         logger.info(f"  TIMECAMP_DISABLE_EXTERNAL_ID_SYNC = {config.disable_external_id_sync}")
         logger.info(f"  TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC = {config.disable_additional_email_sync}")
+        logger.info(f"  TIMECAMP_DISABLE_CUSTOM_FIELDS_SYNC = {config.disable_custom_fields_sync}")
         logger.info(f"  TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID = {config.update_email_on_external_id}")
         logger.info(f"  TIMECAMP_DISABLE_MANUAL_USER_UPDATES = {config.disable_manual_user_updates}")
         logger.info(f"  TIMECAMP_DISABLE_USER_DEACTIVATION = {config.disable_user_deactivation}")

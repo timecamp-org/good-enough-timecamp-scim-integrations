@@ -240,6 +240,39 @@ class TimeCampAPI:
         
         return result
 
+    def get_custom_field_templates(self, resource_type: str = 'user') -> List[Dict[str, Any]]:
+        """Get the custom field templates of one resource type (user, task or entry)."""
+        templates = self._make_request('GET', "v3/custom-fields/template/list").json().get('data', [])
+        return [template for template in templates if template.get('resourceType') == resource_type]
+
+    def get_custom_field_values(self, resource_type: str, resource_ids: List[int],
+                                template_ids: Optional[List[int]] = None,
+                                batch_size: int = 500) -> Dict[int, Dict[int, Optional[str]]]:
+        """Get current custom field values for many resources in bulk.
+
+        Returns {resource_id: {template_id: value}}. Value is None when the field is empty.
+        """
+        result: Dict[int, Dict[int, Optional[str]]] = {}
+
+        for i in range(0, len(resource_ids), batch_size):
+            batch = resource_ids[i:i + batch_size]
+            body: Dict[str, Any] = {"resourceType": resource_type, "resourceIds": batch}
+            if template_ids:
+                body["templateIds"] = template_ids
+            rows = self._make_request('POST', "v3/custom-fields/values/search", json=body).json().get('data', [])
+            for row in rows:
+                result.setdefault(int(row['resourceId']), {})[int(row['templateId'])] = row.get('value')
+
+        return result
+
+    def assign_custom_field_value(self, template_id: int, resource_id: int, value: str) -> None:
+        """Set the current value of a custom field for a resource."""
+        self._make_request('POST', f"v3/custom-fields/{template_id}/assign/{resource_id}", json={"value": value})
+
+    def unassign_custom_field_value(self, template_id: int, resource_id: int) -> None:
+        """Clear the current value of a custom field for a resource."""
+        self._make_request('DELETE', f"v3/custom-fields/{template_id}/unassign/{resource_id}")
+
     def add_vacation(self, user_id: int, start_date: str, end_date: str, leave_type_id: str, shouldBe: int, vacationTime: int) -> None:
         """Add vacation/leave days for a user, iterating over the date range."""
 

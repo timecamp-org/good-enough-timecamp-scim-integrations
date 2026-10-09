@@ -46,6 +46,7 @@ open htmlcov/index.html
 - Move disabled users to specific group (TIMECAMP_DISABLED_USERS_GROUP_ID) ✅
 - Re-enable disabled users ✅
 - Set added_manually=0 for user after any update to ensure proper tracking ✅
+- Sync user custom fields from source `custom_fields` (set, clear, skip unchanged, new users) ✅
 
 
 ## Test Suite Overview

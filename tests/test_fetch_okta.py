@@ -41,6 +41,7 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("OKTA_SUPERVISOR_MATCH_FIELD", "")
     monkeypatch.setenv("OKTA_SUPERVISOR_RULE", "")
     monkeypatch.setenv("OKTA_MAX_HIERARCHY_ROOTS", "0")
+    monkeypatch.setenv("OKTA_TIMECAMP_CUSTOM_FIELDS", "")
 
 
 def make_okta_user(
@@ -160,6 +161,40 @@ def test_transform_okta_user_custom_fields_and_supervisor_rule():
     assert user["job_title"] == "Lead"
     assert user["supervisor_id"] == "mgr-1"
     assert user["is_supervisor"] is True
+
+
+def test_transform_okta_user_maps_profile_fields_to_timecamp_custom_fields():
+    okta_user = make_okta_user(
+        "00u1",
+        "jane@example.com",
+        title="Senior Developer",
+        extra_profile={"costCenter": 1200, "teams": ["Team A", "Team B"], "notes": ""},
+    )
+    field_config = {
+        "custom_fields": [
+            ("title", "Job Position"),
+            ("profile.costCenter", "Cost Center"),
+            ("teams", "Teams"),
+            ("notes", "Notes"),
+            ("missingField", "Location"),
+        ],
+    }
+
+    user = transform_okta_user_to_schema(okta_user, field_config)
+
+    assert user["custom_fields"] == {
+        "Job Position": "Senior Developer",
+        "Cost Center": "1200",
+        "Teams": "Team A, Team B",
+        "Notes": None,
+        "Location": None,
+    }
+
+
+def test_transform_okta_user_without_custom_field_mapping_has_no_custom_fields():
+    user = transform_okta_user_to_schema(make_okta_user("00u1", "jane@example.com"))
+
+    assert "custom_fields" not in user
 
 
 def test_transform_okta_user_uses_configured_profile_field_as_external_id():
@@ -612,3 +647,63 @@ def test_hierarchy_root_limit_is_configurable_and_enforced(
     report = get_logged_okta_validation(caplog)
     assert report["root_limit_exceeded"] is True
     assert len(report["hierarchy_roots"]) == 2
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_fetch_okta_users_writes_configured_timecamp_custom_fields(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+):
+    monkeypatch.setenv("OKTA_TIMECAMP_CUSTOM_FIELDS", "title:Job Position,costCenter:Cost Center")
+    manager = make_okta_user(
+        "00u-manager",
+        "manager@example.com",
+        title="Team Lead",
+        status="SUSPENDED",
+        extra_profile={"costCenter": "200"},
+    )
+
+    def side_effect(url, **kwargs):
+        if url.endswith("/api/v1/users") and kwargs.get("params", {}).get("filter") == 'status eq "ACTIVE"':
+            return mock_response([
+                make_okta_user(
+                    "00u1",
+                    "user@example.com",
+                    title="Developer",
+                    manager_id="00u-manager",
+                    extra_profile={"costCenter": "100"},
+                ),
+                make_okta_user("00u2", "other@example.com", title=""),
+            ])
+        if url.endswith("/api/v1/users/00u-manager"):
+            return mock_response(manager)
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    mock_get.side_effect = side_effect
+
+    fetch_okta_users()
+
+    users_by_id = {user["external_id"]: user for user in mock_save.call_args[0][0]["users"]}
+    assert users_by_id["00u1"]["custom_fields"] == {"Job Position": "Developer", "Cost Center": "100"}
+    assert users_by_id["00u2"]["custom_fields"] == {"Job Position": None, "Cost Center": None}
+    assert users_by_id["00u-manager"]["custom_fields"] == {"Job Position": "Team Lead", "Cost Center": "200"}
+
+
+@patch("fetch_okta.requests.get")
+@patch("common.storage.save_json_file")
+def test_fetch_okta_users_rejects_invalid_custom_field_mapping(
+    mock_save,
+    mock_get,
+    mock_env,
+    monkeypatch,
+):
+    monkeypatch.setenv("OKTA_TIMECAMP_CUSTOM_FIELDS", "title")
+
+    with pytest.raises(ValueError, match="OKTA_TIMECAMP_CUSTOM_FIELDS entry 'title'"):
+        fetch_okta_users()
+
+    mock_get.assert_not_called()
+    mock_save.assert_not_called()

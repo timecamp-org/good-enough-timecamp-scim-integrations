@@ -17,3 +17,5 @@ var/
 .idea/
 CLAUDE.md
 htmlcov/
+.coverage
+coverage.xml

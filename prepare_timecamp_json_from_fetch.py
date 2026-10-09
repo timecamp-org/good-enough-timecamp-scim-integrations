@@ -14,6 +14,7 @@ from typing import Dict, List, Any, Set, Tuple, Optional
 from dotenv import load_dotenv
 from common.logger import setup_logger
 from common.utils import TimeCampConfig, clean_name, get_users_file
+from common.custom_fields import normalize_custom_fields
 from common.supervisor_groups import process_source_data
 from common.transform_config import load_transform_config, apply_transform_config
 
@@ -281,6 +282,10 @@ def prepare_timecamp_users(source_data: Dict[str, Any], config: TimeCampConfig) 
             # Also apply domain replacement to real_email if configured
             timecamp_real_email = replace_email_domain(user_data['real_email'], config.replace_email_domain)
             timecamp_user['timecamp_real_email'] = timecamp_real_email
+
+        custom_fields = normalize_custom_fields(user_data.get('custom_fields'))
+        if custom_fields is not None:
+            timecamp_user['timecamp_custom_fields'] = custom_fields
         
         timecamp_users.append(timecamp_user)
     

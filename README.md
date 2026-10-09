@@ -50,6 +50,49 @@ flowchart LR
 2. Transform and filter to TimeCamp format (`prepare_timecamp_json_from_fetch.py`) -> output: `var/timecamp_users.json`
 3. Upload to TimeCamp (`timecamp_sync_users.py`)
 
+## User custom fields
+
+The sync can set TimeCamp user custom fields from any source system. A fetch
+script adds a `custom_fields` object to each user in `var/users.json`. The keys
+are TimeCamp user custom field names:
+
+```json
+{
+  "users": [
+    {
+      "external_id": "1001",
+      "name": "Sample User",
+      "email": "sample.user@example.com",
+      "department": "Engineering",
+      "status": "active",
+      "custom_fields": {
+        "Job Position": "Developer",
+        "Cost Center": null
+      }
+    }
+  ]
+}
+```
+
+- A string value sets the TimeCamp field. Numbers and booleans are converted to text. Lists are joined with `, `.
+- `null` or an empty string clears the TimeCamp field.
+- A field that is not in `custom_fields` is not changed.
+- The custom fields must already exist in TimeCamp as user custom fields. The sync matches them by name. If a name does not match, the sync logs a warning and skips that field.
+- The TimeCamp account needs the Custom Fields module, and the `TIMECAMP_API_KEY` user must be able to read and change custom field values. If TimeCamp refuses access, the sync logs an error and continues without custom fields.
+- The sync does not clear required custom fields, and it skips values that are not numbers for number fields.
+- The sync reads the current values in bulk and sends only the values that changed.
+
+`prepare_timecamp_json_from_fetch.py` writes these values to
+`timecamp_custom_fields` in `var/timecamp_users.json`. Set
+`TIMECAMP_DISABLE_CUSTOM_FIELDS_SYNC=true` to turn off the sync of custom
+fields.
+
+Sources with a built-in custom field mapping:
+- Okta: `OKTA_TIMECAMP_CUSTOM_FIELDS` (see [docs/fetch_okta.md](docs/fetch_okta.md))
+
+For other sources, use `common.custom_fields.extract_custom_fields` in the
+fetch script, or write the `custom_fields` object directly.
+
 ## Configuration
 
 - `docs/.env.example` has the complete environment variable list

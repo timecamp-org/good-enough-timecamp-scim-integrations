@@ -448,3 +448,92 @@ class TestTimeCampAPI:
         call_kwargs = mock_request.call_args[1]
         assert call_kwargs['verify'] is False
 
+
+    @patch('common.api.requests.request')
+    def test_get_custom_field_templates_returns_user_templates(self, mock_request, mock_timecamp_config):
+        """Test that only templates of the requested resource type are returned."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'data': [
+                {'id': 15, 'name': 'Job Position', 'resourceType': 'user', 'fieldType': 'string'},
+                {'id': 16, 'name': 'Priority', 'resourceType': 'task', 'fieldType': 'number'},
+            ]
+        }
+        mock_request.return_value = mock_response
+
+        api = TimeCampAPI(mock_timecamp_config)
+        templates = api.get_custom_field_templates('user')
+
+        assert [template['id'] for template in templates] == [15]
+        call_args = mock_request.call_args
+        assert call_args[0] == ('GET', 'https://app.timecamp.com/third_party/api/v3/custom-fields/template/list')
+
+    @patch('common.api.requests.request')
+    def test_get_custom_field_values_reads_in_batches(self, mock_request, mock_timecamp_config):
+        """Test bulk reading of custom field values with one request per batch."""
+        first_page = Mock(status_code=200)
+        first_page.json.return_value = {
+            'data': [
+                {'resourceId': 1001, 'templateId': 15, 'value': 'Developer'},
+                {'resourceId': 1002, 'templateId': 15, 'value': None},
+            ]
+        }
+        second_page = Mock(status_code=200)
+        second_page.json.return_value = {
+            'data': [{'resourceId': 1003, 'templateId': 15, 'value': 'Tester'}]
+        }
+        mock_request.side_effect = [first_page, second_page]
+
+        api = TimeCampAPI(mock_timecamp_config)
+        values = api.get_custom_field_values('user', [1001, 1002, 1003], [15], batch_size=2)
+
+        assert values == {1001: {15: 'Developer'}, 1002: {15: None}, 1003: {15: 'Tester'}}
+        assert mock_request.call_count == 2
+        first_call, second_call = mock_request.call_args_list
+        assert first_call[0] == ('POST', 'https://app.timecamp.com/third_party/api/v3/custom-fields/values/search')
+        assert first_call[1]['json'] == {'resourceType': 'user', 'resourceIds': [1001, 1002], 'templateIds': [15]}
+        assert second_call[1]['json'] == {'resourceType': 'user', 'resourceIds': [1003], 'templateIds': [15]}
+
+    @patch('common.api.requests.request')
+    def test_get_custom_field_values_without_template_filter(self, mock_request, mock_timecamp_config):
+        """Test that the template filter is omitted when no template IDs are given."""
+        mock_response = Mock(status_code=200)
+        mock_response.json.return_value = {'data': []}
+        mock_request.return_value = mock_response
+
+        api = TimeCampAPI(mock_timecamp_config)
+        assert api.get_custom_field_values('user', [1001]) == {}
+
+        assert mock_request.call_args[1]['json'] == {'resourceType': 'user', 'resourceIds': [1001]}
+
+    @patch('common.api.requests.request')
+    def test_get_custom_field_values_skips_request_for_no_resources(self, mock_request, mock_timecamp_config):
+        """Test that no request is sent when there are no resource IDs."""
+        api = TimeCampAPI(mock_timecamp_config)
+
+        assert api.get_custom_field_values('user', [], [15]) == {}
+        mock_request.assert_not_called()
+
+    @patch('common.api.requests.request')
+    def test_assign_custom_field_value(self, mock_request, mock_timecamp_config):
+        """Test setting a custom field value."""
+        mock_request.return_value = Mock(status_code=200)
+
+        api = TimeCampAPI(mock_timecamp_config)
+        api.assign_custom_field_value(15, 1001, 'Developer')
+
+        call_args = mock_request.call_args
+        assert call_args[0] == ('POST', 'https://app.timecamp.com/third_party/api/v3/custom-fields/15/assign/1001')
+        assert call_args[1]['json'] == {'value': 'Developer'}
+
+    @patch('common.api.requests.request')
+    def test_unassign_custom_field_value(self, mock_request, mock_timecamp_config):
+        """Test clearing a custom field value."""
+        mock_request.return_value = Mock(status_code=200)
+
+        api = TimeCampAPI(mock_timecamp_config)
+        api.unassign_custom_field_value(15, 1001)
+
+        call_args = mock_request.call_args
+        assert call_args[0] == ('DELETE', 'https://app.timecamp.com/third_party/api/v3/custom-fields/15/unassign/1001')

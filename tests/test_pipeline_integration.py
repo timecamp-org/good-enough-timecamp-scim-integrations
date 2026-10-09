@@ -865,3 +865,78 @@ class TestPipelineComplexScenarios:
                 for user in result:
                     for field in required_fields:
                         assert field in user, f"Missing field {field} in user {user.get('timecamp_email')}"
+
+
+class TestPipelineCustomFields:
+    """Test that source custom fields reach the prepared TimeCamp users."""
+
+    @staticmethod
+    def _source_data():
+        return {
+            'users': [
+                {
+                    'external_id': 'user-1',
+                    'name': 'Sample Manager',
+                    'email': 'manager@example.com',
+                    'department': 'Engineering',
+                    'job_title': 'Team Lead',
+                    'status': 'active',
+                    'supervisor_id': '',
+                    'custom_fields': {'Job Position': ' Team Lead ', 'Cost Center': 100},
+                },
+                {
+                    'external_id': 'user-2',
+                    'name': 'Sample User',
+                    'email': 'user@example.com',
+                    'department': 'Engineering',
+                    'job_title': 'Developer',
+                    'status': 'active',
+                    'supervisor_id': 'user-1',
+                    'custom_fields': {'Job Position': 'Developer', 'Cost Center': ''},
+                },
+                {
+                    'external_id': 'user-3',
+                    'name': 'Other User',
+                    'email': 'other@example.com',
+                    'department': 'Sales',
+                    'job_title': 'Seller',
+                    'status': 'active',
+                    'supervisor_id': '',
+                },
+            ]
+        }
+
+    @pytest.mark.parametrize('use_supervisor_groups', ['false', 'true'])
+    def test_custom_fields_are_normalized_into_prepared_users(self, use_supervisor_groups):
+        env = {
+            'TIMECAMP_API_KEY': 'test_key',
+            'TIMECAMP_ROOT_GROUP_ID': '100',
+            'TIMECAMP_USE_SUPERVISOR_GROUPS': use_supervisor_groups,
+        }
+
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                result = prepare_timecamp_users(self._source_data(), config)
+
+        users_by_email = {user['timecamp_email']: user for user in result}
+        assert users_by_email['manager@example.com']['timecamp_custom_fields'] == {
+            'Job Position': 'Team Lead',
+            'Cost Center': '100',
+        }
+        assert users_by_email['user@example.com']['timecamp_custom_fields'] == {
+            'Job Position': 'Developer',
+            'Cost Center': None,
+        }
+        assert 'timecamp_custom_fields' not in users_by_email['other@example.com']
+
+    def test_invalid_custom_fields_fail_preparation(self):
+        source_data = self._source_data()
+        source_data['users'][0]['custom_fields'] = 'Team Lead'
+        env = {'TIMECAMP_API_KEY': 'test_key', 'TIMECAMP_ROOT_GROUP_ID': '100'}
+
+        with patch('common.utils.load_dotenv'):
+            with patch.dict(os.environ, env, clear=True):
+                config = TimeCampConfig.from_env()
+                with pytest.raises(ValueError, match='custom_fields must be an object'):
+                    prepare_timecamp_users(source_data, config)

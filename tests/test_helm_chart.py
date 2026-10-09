@@ -15,6 +15,7 @@ TIMECAMP_CONFIG_ENV = {
     "TIMECAMP_DISABLE_NEW_USERS": "disableNewUsers",
     "TIMECAMP_DISABLE_EXTERNAL_ID_SYNC": "disableExternalIdSync",
     "TIMECAMP_DISABLE_ADDITIONAL_EMAIL_SYNC": "disableAdditionalEmailSync",
+    "TIMECAMP_DISABLE_CUSTOM_FIELDS_SYNC": "disableCustomFieldsSync",
     "TIMECAMP_UPDATE_EMAIL_ON_EXTERNAL_ID": "updateEmailOnExternalId",
     "TIMECAMP_DISABLE_MANUAL_USER_UPDATES": "disableManualUserUpdates",
     "TIMECAMP_DISABLE_USER_DEACTIVATION": "disableUserDeactivation",
@@ -94,4 +95,17 @@ def test_okta_hierarchy_root_limit_is_declared_and_rendered():
     assert (
         "- name: OKTA_MAX_HIERARCHY_ROOTS\n"
         "  value: {{ .maxHierarchyRoots | quote }}"
+    ) in template
+
+
+def test_okta_timecamp_custom_fields_is_declared_and_rendered():
+    values = (REPOSITORY_ROOT / "helm" / "timecamp-scim" / "values.yaml").read_text()
+    template = (
+        REPOSITORY_ROOT / "helm" / "timecamp-scim" / "templates" / "_helpers.tpl"
+    ).read_text()
+
+    assert 'timecampCustomFields: ""' in values
+    assert (
+        "- name: OKTA_TIMECAMP_CUSTOM_FIELDS\n"
+        "  value: {{ .timecampCustomFields | quote }}"
     ) in template

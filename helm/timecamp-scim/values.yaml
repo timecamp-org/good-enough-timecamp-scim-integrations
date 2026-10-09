@@ -168,6 +168,7 @@ config:
     disableNewUsers: false
     disableExternalIdSync: false
     disableAdditionalEmailSync: false
+    disableCustomFieldsSync: false  # Skip TimeCamp user custom fields sync
     updateEmailOnExternalId: false
     disableManualUserUpdates: false
     disableUserDeactivation: false
@@ -230,6 +231,7 @@ config:
     supervisorMatchField: ""  # Manager field compared with supervisorIdField; defaults to externalIdField
     supervisorRule: ""  # Rule for is_supervisor, e.g. "timecampSupervisor:yes"
     maxHierarchyRoots: 0  # 0 reports root count only; positive values fail above this limit
+    timecampCustomFields: ""  # Okta fields to TimeCamp user custom fields, e.g. "title:Job Position,costCenter:Cost Center"
   
   # LDAP Configuration
   ldap:

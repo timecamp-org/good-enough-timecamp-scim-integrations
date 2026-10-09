@@ -76,6 +76,7 @@ config:
     supervisorMatchField: "email"  # Manager field whose value is referenced by managerId
     supervisorRule: ""  # Optional: profile field rule, e.g. "timecampSupervisor:yes"
     maxHierarchyRoots: 0  # Set an expected upper bound after reviewing validation logs
+    timecampCustomFields: "title:Job Position"  # Optional: Okta field to TimeCamp user custom field pairs
   
   ldap:
     host: "ldap.company.local"
